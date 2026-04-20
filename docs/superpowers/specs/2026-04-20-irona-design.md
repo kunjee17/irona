@@ -9,7 +9,7 @@
 
 `irona` is a Ratatui-based terminal UI tool for reclaiming disk space from build artifacts and dependency folders. The user points it at a root directory; it scans recursively, presents a live checklist of found artifact folders with sizes, and permanently deletes the selected ones.
 
-Inspired by `cargo-wipe` and `kondo`, built as a learning project to explore Ratatui, Rayon, Crossbeam, and Tokio together.
+Inspired by `cargo-wipe` and `kondo`. Built with Ratatui, Rayon, Crossbeam, and Tokio.
 
 ---
 
