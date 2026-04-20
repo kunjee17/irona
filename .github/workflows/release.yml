@@ -1,0 +1,74 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: Build ${{ matrix.target }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        include:
+          - target: x86_64-unknown-linux-gnu
+            os: ubuntu-latest
+            binary: irona
+            archive: irona-linux-x86_64.tar.gz
+          - target: aarch64-apple-darwin
+            os: macos-latest
+            binary: irona
+            archive: irona-macos-arm64.tar.gz
+          - target: x86_64-apple-darwin
+            os: macos-latest
+            binary: irona
+            archive: irona-macos-x86_64.tar.gz
+          - target: x86_64-pc-windows-msvc
+            os: windows-latest
+            binary: irona.exe
+            archive: irona-windows-x86_64.zip
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - name: Cache
+        uses: Swatinem/rust-cache@v2
+
+      - name: Build
+        run: cargo build --release --target ${{ matrix.target }}
+
+      - name: Package (Unix)
+        if: matrix.os != 'windows-latest'
+        run: |
+          cp target/${{ matrix.target }}/release/${{ matrix.binary }} .
+          tar czf ${{ matrix.archive }} ${{ matrix.binary }}
+
+      - name: Package (Windows)
+        if: matrix.os == 'windows-latest'
+        run: |
+          cp target/${{ matrix.target }}/release/${{ matrix.binary }} .
+          Compress-Archive -Path ${{ matrix.binary }} -DestinationPath ${{ matrix.archive }}
+
+      - name: Upload to release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: ${{ matrix.archive }}
+
+  publish:
+    name: Publish to crates.io
+    runs-on: ubuntu-latest
+    needs: build
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Publish
+        run: cargo publish --token ${{ secrets.CARGO_REGISTRY_TOKEN }}
