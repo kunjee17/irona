@@ -1,42 +1,54 @@
-mod app;
+mod components;
 mod deleter;
+mod errors;
+mod model;
+mod render;
 mod scanner;
-mod ui;
 
-use app::{AppState, AppStatus};
+use anyhow::Result;
 use clap::Parser;
+use components::{
+    entry_list::EntryListComponent, header::HeaderComponent, status_bar::StatusBarComponent,
+    ComponentId,
+};
 use crossbeam_channel::unbounded;
 use crossterm::{
-    event::{self, Event, KeyCode, KeyEventKind},
     execute,
     terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
 };
+use model::{update, AppMsg, AppStatus, DeleteMsg, ListMsg};
 use ratatui::{backend::CrosstermBackend, widgets::ListState, Terminal};
+use render::render;
 use scanner::ScanMessage;
-use std::{io, path::PathBuf, thread, time::Duration};
+use std::{io, path::PathBuf, sync::mpsc, thread, time::Duration};
+use tuirealm::{
+    event::NoUserEvent, Application, EventListenerCfg, PollStrategy, Sub, SubClause, SubEventClause,
+};
 
 #[derive(Parser)]
 #[command(name = "irona", about = "Reclaim disk space from build artifacts")]
 struct Args {
-    /// Root directory to scan (defaults to current directory)
     #[arg(default_value = ".")]
     path: PathBuf,
 }
 
-fn main() -> anyhow::Result<()> {
+fn main() -> Result<()> {
     let args = Args::parse();
     let root = args.path.canonicalize().unwrap_or(args.path);
 
     let original_hook = std::panic::take_hook();
     std::panic::set_hook(Box::new(move |info| {
         let _ = disable_raw_mode();
-        let _ = execute!(io::stdout(), LeaveAlternateScreen);
+        let _ = execute!(io::stdout(), LeaveAlternateScreen, crossterm::cursor::Show);
         original_hook(info);
     }));
 
     enable_raw_mode()?;
     let mut stdout = io::stdout();
-    execute!(stdout, EnterAlternateScreen)?;
+    if let Err(e) = execute!(stdout, EnterAlternateScreen) {
+        let _ = disable_raw_mode();
+        return Err(e.into());
+    }
     let backend = CrosstermBackend::new(stdout);
     let mut terminal = Terminal::new(backend)?;
 
@@ -45,97 +57,123 @@ fn main() -> anyhow::Result<()> {
     disable_raw_mode()?;
     execute!(terminal.backend_mut(), LeaveAlternateScreen)?;
     terminal.show_cursor()?;
-
     result
 }
 
-fn run(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, root: PathBuf) -> anyhow::Result<()> {
-    let (tx, rx) = unbounded::<ScanMessage>();
+fn run(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, root: PathBuf) -> Result<()> {
+    let (scan_tx, scan_rx) = unbounded::<ScanMessage>();
     let root_clone = root.clone();
+    thread::spawn(move || scanner::scan(root_clone, scan_tx));
 
-    thread::spawn(move || scanner::scan(root_clone, tx));
+    let (del_tx, del_rx) = mpsc::channel::<deleter::DeleteResult>();
 
-    let mut state = AppState::new(root);
+    let mut model = model::AppModel::new(root);
     let mut list_state = ListState::default();
-    list_state.select(Some(0));
+
+    let mut app: Application<ComponentId, AppMsg, NoUserEvent> = Application::init(
+        EventListenerCfg::default()
+            .crossterm_input_listener(Duration::from_millis(20), 10)
+            .tick_interval(Duration::from_secs(1)),
+    );
+
+    app.mount(
+        ComponentId::Header,
+        Box::new(HeaderComponent),
+        vec![Sub::new(SubEventClause::Tick, SubClause::Always)],
+    )?;
+    app.mount(ComponentId::EntryList, Box::new(EntryListComponent), vec![])?;
+    app.mount(ComponentId::StatusBar, Box::new(StatusBarComponent), vec![])?;
+    app.active(&ComponentId::EntryList)?;
 
     let rt = tokio::runtime::Runtime::new()?;
+    let mut delete_pending = 0usize;
+    let mut scan_done = false;
 
     loop {
-        // Drain all pending channel messages this tick
+        if !scan_done {
+            loop {
+                match scan_rx.try_recv() {
+                    Ok(ScanMessage::Found(entry)) => {
+                        update(&mut model, AppMsg::List(ListMsg::ScanFound(entry)));
+                    }
+                    Ok(ScanMessage::Done) => {
+                        update(&mut model, AppMsg::List(ListMsg::ScanDone));
+                        scan_done = true;
+                        break;
+                    }
+                    Err(crossbeam_channel::TryRecvError::Empty) => break,
+                    Err(crossbeam_channel::TryRecvError::Disconnected) => {
+                        update(&mut model, AppMsg::List(ListMsg::ScanDone));
+                        scan_done = true;
+                        break;
+                    }
+                }
+            }
+        }
+
+        if model.status == AppStatus::Deleting && delete_pending == 0 {
+            let paths = model.entries.selected_paths();
+            if paths.is_empty() {
+                update(&mut model, AppMsg::Delete(DeleteMsg::AllDone));
+            } else {
+                delete_pending = paths.len();
+                let tx = del_tx.clone();
+                rt.spawn(async move {
+                    let results = deleter::delete_all(paths).await;
+                    for r in results {
+                        let _ = tx.send(r);
+                    }
+                });
+            }
+        }
+
         loop {
-            match rx.try_recv() {
-                Ok(ScanMessage::Found(entry)) => state.add_entry(entry),
-                Ok(ScanMessage::Done) => {
-                    state.mark_scan_done();
-                    break;
+            match del_rx.try_recv() {
+                Ok(result) => {
+                    update(
+                        &mut model,
+                        AppMsg::Delete(DeleteMsg::Result {
+                            index: result.index,
+                            elapsed: result.elapsed,
+                            outcome: result.outcome,
+                        }),
+                    );
+                    delete_pending = delete_pending.saturating_sub(1);
+                    if delete_pending == 0 {
+                        update(&mut model, AppMsg::Delete(DeleteMsg::AllDone));
+                    }
                 }
-                Err(crossbeam_channel::TryRecvError::Empty) => break,
-                Err(crossbeam_channel::TryRecvError::Disconnected) => {
-                    state.mark_scan_done();
+                Err(mpsc::TryRecvError::Empty) => break,
+                Err(mpsc::TryRecvError::Disconnected) => {
+                    if delete_pending > 0 {
+                        delete_pending = 0;
+                        update(&mut model, AppMsg::Delete(DeleteMsg::AllDone));
+                    }
                     break;
                 }
             }
         }
 
-        if !state.entries.is_empty() {
-            list_state.select(Some(state.cursor));
+        match model.status {
+            AppStatus::ConfirmDelete => {
+                let _ = app.active(&ComponentId::StatusBar);
+            }
+            _ => {
+                let _ = app.active(&ComponentId::EntryList);
+            }
         }
 
-        terminal.draw(|f| ui::render(f, &state, &mut list_state))?;
+        terminal.draw(|f| render(f, &model, &mut list_state))?;
 
-        if event::poll(Duration::from_millis(16))? {
-            if let Event::Key(key) = event::read()? {
-                if key.kind != KeyEventKind::Press {
-                    continue;
-                }
-                let status = state.status.clone();
-                match (status, key.code) {
-                    (_, KeyCode::Char('q')) => break,
-
-                    (AppStatus::Scanning | AppStatus::Ready, KeyCode::Up) => state.move_up(),
-                    (AppStatus::Scanning | AppStatus::Ready, KeyCode::Down) => state.move_down(),
-                    (AppStatus::Scanning | AppStatus::Ready, KeyCode::Char(' ')) => {
-                        state.toggle_selected()
+        match app.tick(PollStrategy::Once) {
+            Ok(messages) => {
+                for msg in messages {
+                    if !update(&mut model, msg) {
+                        return Ok(());
                     }
-                    (AppStatus::Scanning | AppStatus::Ready, KeyCode::Char('a')) => {
-                        state.toggle_select_all()
-                    }
-
-                    (AppStatus::Scanning | AppStatus::Ready, KeyCode::Char('d')) => {
-                        state.status = AppStatus::ConfirmDelete;
-                    }
-
-                    (AppStatus::ConfirmDelete, KeyCode::Char('y'))
-                        if !state.selected.is_empty() =>
-                    {
-                        state.status = AppStatus::Deleting;
-                        terminal.draw(|f| ui::render(f, &state, &mut list_state))?;
-                        let paths = state.selected_paths();
-                        let results = rt.block_on(deleter::delete_all(paths));
-                        for r in &results {
-                            if !r.success {
-                                if let Some(ref err) = r.error {
-                                    eprintln!("failed to delete {}: {}", r.path.display(), err);
-                                }
-                            }
-                        }
-                        state.selected.clear();
-                        state.entries.retain(|e| e.path.exists());
-                        state.cursor = 0;
-                        state.status = AppStatus::Ready;
-                    }
-
-                    (AppStatus::ConfirmDelete, KeyCode::Char('n') | KeyCode::Esc)
-                    | (AppStatus::ConfirmDelete, KeyCode::Char('y')) => {
-                        state.status = AppStatus::Ready;
-                    }
-
-                    _ => {}
                 }
             }
+            Err(_) => return Ok(()),
         }
     }
-
-    Ok(())
 }

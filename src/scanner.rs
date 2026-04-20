@@ -18,7 +18,7 @@ impl std::fmt::Display for Language {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 #[allow(dead_code)]
 pub struct ArtifactEntry {
     pub path: PathBuf,

@@ -14,3 +14,7 @@ Thumbs.db
 # Env
 .env
 .env.local
+
+# Serena
+.serena/
+.code-review-graph
