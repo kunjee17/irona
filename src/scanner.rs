@@ -1,6 +1,3 @@
-// Scanner items are not yet wired into main — suppress dead_code for this WIP module.
-#![allow(dead_code)]
-
 use std::fs;
 use std::path::PathBuf;
 
@@ -28,6 +25,7 @@ impl std::fmt::Display for Language {
 #[derive(Debug, Clone)]
 pub struct ArtifactEntry {
     pub path: PathBuf,
+    #[allow(dead_code)]
     pub language: Language,
     pub size_bytes: u64,
 }
