@@ -1,3 +1,4 @@
+use std::fs;
 use std::path::PathBuf;
 
 #[derive(Debug, Clone, PartialEq)]
@@ -21,6 +22,7 @@ impl std::fmt::Display for Language {
 #[allow(dead_code)]
 pub struct ArtifactEntry {
     pub path: PathBuf,
+    #[allow(dead_code)]
     pub language: Language,
     pub size_bytes: u64,
 }
@@ -32,7 +34,6 @@ pub enum ScanMessage {
     Done,
 }
 
-use std::fs;
 
 /// Checks `dir` for marker files and returns artifact subdirectories found.
 /// Only returns a folder if its parent contains the expected marker — avoids

@@ -1,6 +1,3 @@
-// UI render is not yet wired into main — suppress dead_code for this WIP module.
-#![allow(dead_code)]
-
 use crate::app::{AppState, AppStatus};
 use ratatui::{
     layout::{Constraint, Direction, Layout},
