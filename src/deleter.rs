@@ -1,37 +1,42 @@
+use crate::errors::IronaError;
 use std::path::PathBuf;
+use std::time::{Duration, Instant};
 
 #[derive(Debug)]
 pub struct DeleteResult {
-    pub path: PathBuf,
-    pub success: bool,
-    pub error: Option<String>,
+    pub index: usize,
+    pub elapsed: Duration,
+    pub outcome: Result<(), IronaError>,
 }
 
-pub async fn delete_all(paths: Vec<PathBuf>) -> Vec<DeleteResult> {
+pub async fn delete_all(paths: Vec<(usize, PathBuf)>) -> Vec<DeleteResult> {
     let handles: Vec<_> = paths
         .into_iter()
-        .map(|path| {
-            tokio::spawn(async move {
-                match tokio::fs::remove_dir_all(&path).await {
-                    Ok(_) => DeleteResult {
-                        path,
-                        success: true,
-                        error: None,
-                    },
-                    Err(e) => DeleteResult {
-                        path,
-                        success: false,
-                        error: Some(e.to_string()),
-                    },
+        .map(|(index, path)| {
+            let handle = tokio::spawn(async move {
+                let start = Instant::now();
+                let outcome = tokio::fs::remove_dir_all(&path)
+                    .await
+                    .map_err(IronaError::from);
+                DeleteResult {
+                    index,
+                    elapsed: start.elapsed(),
+                    outcome,
                 }
-            })
+            });
+            (handle, index)
         })
         .collect();
 
     let mut results = Vec::new();
-    for handle in handles {
-        if let Ok(result) = handle.await {
-            results.push(result);
+    for (handle, index) in handles {
+        match handle.await {
+            Ok(r) => results.push(r),
+            Err(_) => results.push(DeleteResult {
+                index,
+                elapsed: Duration::ZERO,
+                outcome: Err(IronaError::ScanError("task panicked".to_string())),
+            }),
         }
     }
     results
@@ -50,18 +55,18 @@ mod tests {
         fs::create_dir(&dir).unwrap();
         fs::write(dir.join("file.txt"), "data").unwrap();
 
-        let results = delete_all(vec![dir.clone()]).await;
+        let results = delete_all(vec![(0, dir.clone())]).await;
         assert_eq!(results.len(), 1);
-        assert!(results[0].success);
+        assert!(results[0].outcome.is_ok());
         assert!(!dir.exists());
+        assert!(results[0].elapsed.as_nanos() > 0);
     }
 
     #[tokio::test]
     async fn reports_error_for_missing_directory() {
-        let results = delete_all(vec![PathBuf::from("/nonexistent/xyz/abc")]).await;
+        let results = delete_all(vec![(0, PathBuf::from("/nonexistent/xyz/abc"))]).await;
         assert_eq!(results.len(), 1);
-        assert!(!results[0].success);
-        assert!(results[0].error.is_some());
+        assert!(results[0].outcome.is_err());
     }
 
     #[tokio::test]
@@ -72,9 +77,9 @@ mod tests {
         fs::create_dir(&a).unwrap();
         fs::create_dir(&b).unwrap();
 
-        let results = delete_all(vec![a.clone(), b.clone()]).await;
+        let results = delete_all(vec![(0, a.clone()), (1, b.clone())]).await;
         assert_eq!(results.len(), 2);
-        assert!(results.iter().all(|r| r.success));
+        assert!(results.iter().all(|r| r.outcome.is_ok()));
         assert!(!a.exists());
         assert!(!b.exists());
     }
