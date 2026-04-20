@@ -1,6 +1,3 @@
-// App state is not yet wired into main — suppress dead_code for this WIP module.
-#![allow(dead_code)]
-
 use crate::scanner::ArtifactEntry;
 use std::collections::HashSet;
 use std::path::PathBuf;
@@ -11,6 +8,7 @@ pub enum AppStatus {
     Ready,
     ConfirmDelete,
     Deleting,
+    #[allow(dead_code)]
     Done,
 }
 
