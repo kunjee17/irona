@@ -1,0 +1,738 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>irona — Reclaim your disk. Clean your workspace.</title>
+  <meta name="description" content="irona is a Rust TUI CLI tool that scans your workspace for build artifacts — Rust target/, Node node_modules/, C# bin/+obj/ — and lets you delete them interactively." />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;700&display=swap" rel="stylesheet" />
+
+  <style>
+    /* ─── Design tokens ────────────────────────────────────────────────── */
+    :root {
+      --bg:          #0d0d0d;
+      --surface:     #111111;
+      --surface-2:   #161616;
+      --border:      #1e1e1e;
+      --border-glow: #39ff1440;
+      --phosphor:    #39ff14;
+      --phosphor-dim: #27b30e;
+      --amber:       #ffb347;
+      --muted:       #4a4a4a;
+      --text:        #c8c8c8;
+      --white:       #f0f0f0;
+      --font:        'JetBrains Mono', 'Fira Code', 'Cascadia Code', monospace;
+      --space:       8px;
+    }
+
+    /* ─── Reset ────────────────────────────────────────────────────────── */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    html {
+      scroll-behavior: smooth;
+    }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: var(--font);
+      font-size: 14px;
+      line-height: 1.6;
+      min-height: 100vh;
+      /* Subtle scanline texture */
+      background-image: repeating-linear-gradient(
+        0deg,
+        transparent,
+        transparent 2px,
+        rgba(255,255,255,0.008) 2px,
+        rgba(255,255,255,0.008) 4px
+      );
+    }
+
+    /* ─── Scrollbar ────────────────────────────────────────────────────── */
+    ::-webkit-scrollbar { width: 4px; }
+    ::-webkit-scrollbar-track { background: var(--bg); }
+    ::-webkit-scrollbar-thumb { background: var(--border); }
+    ::-webkit-scrollbar-thumb:hover { background: var(--phosphor-dim); }
+
+    /* ─── Layout containers ────────────────────────────────────────────── */
+    .container {
+      max-width: 860px;
+      margin: 0 auto;
+      padding: 0 calc(var(--space) * 3);
+    }
+
+    section {
+      padding: calc(var(--space) * 10) 0;
+      border-bottom: 1px solid var(--border);
+    }
+
+    section:last-of-type {
+      border-bottom: none;
+    }
+
+    /* ─── Section label (uppercase stamped label) ──────────────────────── */
+    .section-label {
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: 0.25em;
+      text-transform: uppercase;
+      color: var(--muted);
+      margin-bottom: calc(var(--space) * 5);
+      display: flex;
+      align-items: center;
+      gap: calc(var(--space) * 2);
+    }
+
+    .section-label::after {
+      content: '';
+      flex: 1;
+      height: 1px;
+      background: var(--border);
+    }
+
+    /* ─── Top bar ──────────────────────────────────────────────────────── */
+    .topbar {
+      border-bottom: 1px solid var(--border);
+      padding: calc(var(--space) * 2) 0;
+    }
+
+    .topbar .container {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .topbar-logo {
+      font-size: 13px;
+      font-weight: 700;
+      color: var(--phosphor);
+      letter-spacing: 0.1em;
+      text-decoration: none;
+    }
+
+    .topbar-nav {
+      display: flex;
+      gap: calc(var(--space) * 4);
+      list-style: none;
+    }
+
+    .topbar-nav a {
+      font-size: 11px;
+      color: var(--muted);
+      text-decoration: none;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      transition: color 120ms;
+    }
+
+    .topbar-nav a:hover { color: var(--text); }
+
+    /* ─── Hero ─────────────────────────────────────────────────────────── */
+    #hero {
+      padding: calc(var(--space) * 16) 0 calc(var(--space) * 12);
+      border-bottom: 1px solid var(--border);
+    }
+
+    .hero-eyebrow {
+      font-size: 11px;
+      color: var(--phosphor);
+      letter-spacing: 0.2em;
+      text-transform: uppercase;
+      margin-bottom: calc(var(--space) * 3);
+      opacity: 0;
+      animation: fade-up 400ms 100ms forwards;
+    }
+
+    .hero-title {
+      font-size: clamp(52px, 8vw, 88px);
+      font-weight: 700;
+      color: var(--white);
+      line-height: 1;
+      letter-spacing: -0.02em;
+      margin-bottom: calc(var(--space) * 3);
+      opacity: 0;
+      animation: fade-up 400ms 200ms forwards;
+    }
+
+    /* The phosphor accent on the title */
+    .hero-title span {
+      color: var(--phosphor);
+      position: relative;
+    }
+
+    .hero-tagline {
+      font-size: 18px;
+      font-weight: 300;
+      color: var(--text);
+      max-width: 480px;
+      margin-bottom: calc(var(--space) * 8);
+      opacity: 0;
+      animation: fade-up 400ms 300ms forwards;
+    }
+
+    /* ─── Install command ──────────────────────────────────────────────── */
+    .install-block {
+      opacity: 0;
+      animation: fade-up 400ms 400ms forwards;
+      margin-bottom: calc(var(--space) * 4);
+    }
+
+    .prompt-line {
+      display: inline-flex;
+      align-items: center;
+      gap: 0;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      padding: calc(var(--space) * 2) calc(var(--space) * 3);
+      position: relative;
+      cursor: pointer;
+      transition: border-color 150ms, box-shadow 150ms;
+      /* Left accent bar */
+    }
+
+    .prompt-line::before {
+      content: '';
+      position: absolute;
+      left: 0;
+      top: 0;
+      bottom: 0;
+      width: 3px;
+      background: var(--phosphor);
+    }
+
+    .prompt-line:hover {
+      border-color: var(--phosphor-dim);
+      box-shadow: 0 0 16px var(--border-glow);
+    }
+
+    .prompt-line:hover .copy-hint {
+      opacity: 1;
+    }
+
+    .prompt-dollar {
+      color: var(--phosphor);
+      margin-right: calc(var(--space) * 2);
+      user-select: none;
+      font-weight: 700;
+    }
+
+    .prompt-cmd {
+      color: var(--amber);
+      font-size: 15px;
+      letter-spacing: 0.02em;
+    }
+
+    /* blinking cursor after the command */
+    .prompt-cursor {
+      display: inline-block;
+      width: 9px;
+      height: 16px;
+      background: var(--phosphor);
+      margin-left: 4px;
+      vertical-align: middle;
+      animation: blink 1s step-end infinite;
+    }
+
+    .copy-hint {
+      font-size: 10px;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: 0.15em;
+      margin-left: calc(var(--space) * 4);
+      opacity: 0;
+      transition: opacity 150ms;
+      user-select: none;
+    }
+
+    .copy-feedback {
+      font-size: 10px;
+      color: var(--phosphor);
+      text-transform: uppercase;
+      letter-spacing: 0.15em;
+      margin-left: calc(var(--space) * 2);
+      opacity: 0;
+      transition: opacity 150ms;
+    }
+
+    .copy-feedback.show { opacity: 1; }
+
+    .hero-links {
+      display: flex;
+      align-items: center;
+      gap: calc(var(--space) * 4);
+      flex-wrap: wrap;
+      opacity: 0;
+      animation: fade-up 400ms 500ms forwards;
+    }
+
+    .btn-release {
+      display: inline-flex;
+      align-items: center;
+      gap: calc(var(--space) * 1.5);
+      font-family: var(--font);
+      font-size: 12px;
+      font-weight: 500;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--text);
+      text-decoration: none;
+      border: 1px solid var(--border);
+      padding: calc(var(--space) * 1.5) calc(var(--space) * 3);
+      transition: border-color 150ms, color 150ms;
+    }
+
+    .btn-release:hover {
+      border-color: var(--text);
+      color: var(--white);
+    }
+
+    .btn-release svg {
+      width: 14px; height: 14px;
+      stroke: currentColor;
+      fill: none;
+    }
+
+    .hero-hint {
+      font-size: 11px;
+      color: var(--muted);
+    }
+
+    /* ─── How it works ─────────────────────────────────────────────────── */
+    .steps {
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 1px;
+      background: var(--border);
+      border: 1px solid var(--border);
+    }
+
+    .step {
+      background: var(--surface);
+      padding: calc(var(--space) * 5) calc(var(--space) * 5);
+      display: grid;
+      grid-template-columns: 48px 1fr;
+      gap: calc(var(--space) * 4);
+      align-items: start;
+      transition: background 150ms;
+    }
+
+    .step:hover {
+      background: var(--surface-2);
+    }
+
+    .step-number {
+      font-size: 11px;
+      font-weight: 700;
+      color: var(--phosphor);
+      letter-spacing: 0.1em;
+      padding-top: 2px;
+    }
+
+    .step-body {}
+
+    .step-title {
+      font-size: 13px;
+      font-weight: 700;
+      color: var(--white);
+      letter-spacing: 0.05em;
+      margin-bottom: calc(var(--space) * 1.5);
+    }
+
+    .step-desc {
+      font-size: 13px;
+      color: var(--text);
+      line-height: 1.7;
+    }
+
+    .step-code {
+      display: inline-block;
+      background: var(--bg);
+      color: var(--amber);
+      padding: 2px 6px;
+      font-size: 12px;
+      border: 1px solid var(--border);
+    }
+
+    .step-key {
+      display: inline-block;
+      background: var(--border);
+      color: var(--white);
+      padding: 1px 8px;
+      font-size: 12px;
+      font-weight: 700;
+      border: 1px solid var(--muted);
+      border-bottom-width: 2px;
+    }
+
+    /* TUI preview mockup */
+    .tui-preview {
+      margin-top: calc(var(--space) * 3);
+      background: var(--bg);
+      border: 1px solid var(--border);
+      padding: calc(var(--space) * 3);
+      font-size: 12px;
+      line-height: 1.8;
+      overflow-x: auto;
+    }
+
+    .tui-line { white-space: pre; }
+    .tui-checked { color: var(--phosphor); }
+    .tui-unchecked { color: var(--muted); }
+    .tui-size { color: var(--amber); }
+    .tui-path { color: var(--text); }
+    .tui-selected {
+      background: rgba(57, 255, 20, 0.1);
+      color: var(--white);
+    }
+    .tui-hint {
+      color: var(--muted);
+      font-size: 11px;
+      margin-top: calc(var(--space) * 1);
+    }
+
+    /* ─── Supported languages ──────────────────────────────────────────── */
+    .langs {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      gap: 1px;
+      background: var(--border);
+      border: 1px solid var(--border);
+    }
+
+    .lang-card {
+      background: var(--surface);
+      padding: calc(var(--space) * 5);
+      transition: background 150ms;
+    }
+
+    .lang-card:hover {
+      background: var(--surface-2);
+    }
+
+    .lang-icon {
+      width: 32px;
+      height: 32px;
+      margin-bottom: calc(var(--space) * 3);
+    }
+
+    .lang-name {
+      font-size: 13px;
+      font-weight: 700;
+      color: var(--white);
+      letter-spacing: 0.05em;
+      margin-bottom: calc(var(--space) * 1.5);
+    }
+
+    .lang-dirs {
+      display: flex;
+      flex-wrap: wrap;
+      gap: calc(var(--space) * 1);
+    }
+
+    .dir-badge {
+      font-size: 11px;
+      color: var(--amber);
+      background: var(--bg);
+      border: 1px solid var(--border);
+      padding: 2px calc(var(--space) * 1.5);
+    }
+
+    /* ─── Footer ───────────────────────────────────────────────────────── */
+    footer {
+      padding: calc(var(--space) * 6) 0;
+      border-top: 1px solid var(--border);
+    }
+
+    footer .container {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      gap: calc(var(--space) * 3);
+    }
+
+    .footer-brand {
+      font-size: 12px;
+      color: var(--muted);
+      letter-spacing: 0.05em;
+    }
+
+    .footer-brand strong {
+      color: var(--phosphor);
+      font-weight: 700;
+    }
+
+    .footer-links {
+      display: flex;
+      gap: calc(var(--space) * 4);
+      align-items: center;
+    }
+
+    .footer-links a {
+      display: inline-flex;
+      align-items: center;
+      gap: calc(var(--space) * 1.5);
+      font-size: 12px;
+      color: var(--muted);
+      text-decoration: none;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      transition: color 150ms;
+    }
+
+    .footer-links a:hover { color: var(--white); }
+
+    .footer-links svg {
+      width: 16px; height: 16px;
+      fill: currentColor;
+    }
+
+    /* ─── Animations ───────────────────────────────────────────────────── */
+    @keyframes blink {
+      0%, 100% { opacity: 1; }
+      50%       { opacity: 0; }
+    }
+
+    @keyframes fade-up {
+      from { opacity: 0; transform: translateY(12px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+
+    /* ─── Responsive ───────────────────────────────────────────────────── */
+    @media (max-width: 600px) {
+      .topbar-nav { display: none; }
+      .step {
+        grid-template-columns: 32px 1fr;
+        gap: calc(var(--space) * 2);
+      }
+      .langs { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+
+  <!-- ── Top bar ─────────────────────────────────────────────────────── -->
+  <header class="topbar" role="banner">
+    <div class="container">
+      <a href="#" class="topbar-logo">irona</a>
+      <nav aria-label="Site navigation">
+        <ul class="topbar-nav">
+          <li><a href="#how-it-works">How it works</a></li>
+          <li><a href="#languages">Languages</a></li>
+          <li><a href="https://github.com/kunjee17/irona" target="_blank" rel="noopener">GitHub</a></li>
+        </ul>
+      </nav>
+    </div>
+  </header>
+
+  <main>
+
+    <!-- ── Hero ──────────────────────────────────────────────────────── -->
+    <section id="hero" aria-labelledby="hero-heading">
+      <div class="container">
+        <p class="hero-eyebrow">Rust TUI · build artifact cleaner</p>
+
+        <h1 class="hero-title" id="hero-heading">
+          <span>irona</span>
+        </h1>
+
+        <p class="hero-tagline">
+          Reclaim your disk.<br>Clean your workspace.
+        </p>
+
+        <div class="install-block">
+          <button
+            class="prompt-line"
+            onclick="copyInstall(this)"
+            aria-label="Copy install command: cargo install irona"
+            title="Click to copy"
+          >
+            <span class="prompt-dollar" aria-hidden="true">$</span>
+            <span class="prompt-cmd">cargo install irona</span>
+            <span class="prompt-cursor" aria-hidden="true"></span>
+            <span class="copy-hint" aria-hidden="true">click to copy</span>
+          </button>
+          <span class="copy-feedback" id="copy-fb" aria-live="polite">copied!</span>
+        </div>
+
+        <div class="hero-links">
+          <a
+            href="https://github.com/kunjee17/irona/releases"
+            class="btn-release"
+            target="_blank"
+            rel="noopener"
+            aria-label="Download pre-built binaries from GitHub Releases"
+          >
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"
+                d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5M16.5 12L12 16.5m0 0L7.5 12m4.5 4.5V3"/>
+            </svg>
+            Pre-built binaries
+          </a>
+          <span class="hero-hint">or build from source with Cargo 1.70+</span>
+        </div>
+      </div>
+    </section>
+
+    <!-- ── How it works ───────────────────────────────────────────────── -->
+    <section id="how-it-works" aria-labelledby="how-heading">
+      <div class="container">
+        <p class="section-label">How it works</p>
+
+        <div class="steps" role="list">
+
+          <article class="step" role="listitem">
+            <div class="step-number" aria-hidden="true">01</div>
+            <div class="step-body">
+              <h3 class="step-title">Point it at your workspace</h3>
+              <p class="step-desc">
+                Run <code class="step-code">irona /your/workspace</code> — irona walks the
+                directory tree and finds every build artifact directory it knows about.
+                No config, no manifest — it just works.
+              </p>
+            </div>
+          </article>
+
+          <article class="step" role="listitem">
+            <div class="step-number" aria-hidden="true">02</div>
+            <div class="step-body">
+              <h3 class="step-title">Review the interactive checklist</h3>
+              <p class="step-desc">
+                A Ratatui TUI opens showing every artifact directory with its on-disk size.
+                Navigate with <span class="step-key">↑</span> <span class="step-key">↓</span>,
+                toggle entries with <span class="step-key">Space</span>.
+                Nothing is touched until you say so.
+              </p>
+
+              <!-- Inline TUI mock -->
+              <div class="tui-preview" aria-label="Terminal UI preview showing build artifact directories with sizes" role="img">
+                <div class="tui-line tui-selected">  <span class="tui-checked">▶ [✓]</span> <span class="tui-path">~/projects/my-app/target</span>             <span class="tui-size">4.2 GB</span></div>
+                <div class="tui-line">    <span class="tui-checked">[✓]</span> <span class="tui-path">~/projects/website/node_modules</span>          <span class="tui-size">812 MB</span></div>
+                <div class="tui-line">    <span class="tui-unchecked">[ ]</span> <span class="tui-path">~/projects/dotnet-api/bin</span>               <span class="tui-size">340 MB</span></div>
+                <div class="tui-line">    <span class="tui-unchecked">[ ]</span> <span class="tui-path">~/projects/dotnet-api/obj</span>               <span class="tui-size"> 98 MB</span></div>
+                <div class="tui-line">    <span class="tui-checked">[✓]</span> <span class="tui-path">~/projects/old-site/node_modules</span>         <span class="tui-size">1.1 GB</span></div>
+                <div class="tui-hint">  2 selected · 5.1 GB will be freed  ·  [space] toggle  [d] delete  [q] quit</div>
+              </div>
+            </div>
+          </article>
+
+          <article class="step" role="listitem">
+            <div class="step-number" aria-hidden="true">03</div>
+            <div class="step-body">
+              <h3 class="step-title">Press <span class="step-key">d</span> to delete</h3>
+              <p class="step-desc">
+                irona removes every checked directory. That's it.
+                Disk space reclaimed. Press <span class="step-key">q</span> to quit.
+                Re-build artifacts are regenerated by your toolchain whenever you need them again.
+              </p>
+            </div>
+          </article>
+
+        </div>
+      </div>
+    </section>
+
+    <!-- ── Supported languages ───────────────────────────────────────── -->
+    <section id="languages" aria-labelledby="langs-heading">
+      <div class="container">
+        <p class="section-label" id="langs-heading">Supported languages</p>
+
+        <div class="langs">
+
+          <!-- Rust -->
+          <article class="lang-card">
+            <!-- Rust gear logo — inline SVG, monochrome phosphor -->
+            <svg class="lang-icon" viewBox="0 0 32 32" fill="none" aria-hidden="true">
+              <circle cx="16" cy="16" r="5" stroke="#39ff14" stroke-width="1.5"/>
+              <path d="M16 4v4M16 24v4M4 16h4M24 16h4" stroke="#39ff14" stroke-width="1.5" stroke-linecap="round"/>
+              <path d="M7.03 7.03l2.83 2.83M22.14 22.14l2.83 2.83M7.03 24.97l2.83-2.83M22.14 9.86l2.83-2.83"
+                stroke="#39ff14" stroke-width="1.5" stroke-linecap="round"/>
+            </svg>
+            <h3 class="lang-name">Rust</h3>
+            <div class="lang-dirs">
+              <span class="dir-badge">target/</span>
+            </div>
+          </article>
+
+          <!-- Node.js -->
+          <article class="lang-card">
+            <!-- Node hexagon logo — inline SVG -->
+            <svg class="lang-icon" viewBox="0 0 32 32" fill="none" aria-hidden="true">
+              <path d="M16 3L29 10.5v15L16 29 3 24.5v-15L16 3z"
+                stroke="#39ff14" stroke-width="1.5" stroke-linejoin="round"/>
+              <path d="M16 10v12M11 13l5-3 5 3" stroke="#39ff14" stroke-width="1.5"
+                stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+            <h3 class="lang-name">Node.js</h3>
+            <div class="lang-dirs">
+              <span class="dir-badge">node_modules/</span>
+            </div>
+          </article>
+
+          <!-- C# / .NET -->
+          <article class="lang-card">
+            <!-- .NET diamond logo — inline SVG -->
+            <svg class="lang-icon" viewBox="0 0 32 32" fill="none" aria-hidden="true">
+              <path d="M16 3l13 13-13 13L3 16 16 3z"
+                stroke="#39ff14" stroke-width="1.5" stroke-linejoin="round"/>
+              <path d="M10 16h12M16 10v12" stroke="#39ff14" stroke-width="1.5" stroke-linecap="round"/>
+            </svg>
+            <h3 class="lang-name">C# / .NET</h3>
+            <div class="lang-dirs">
+              <span class="dir-badge">bin/</span>
+              <span class="dir-badge">obj/</span>
+            </div>
+          </article>
+
+        </div>
+      </div>
+    </section>
+
+  </main>
+
+  <!-- ── Footer ────────────────────────────────────────────────────────── -->
+  <footer role="contentinfo">
+    <div class="container">
+      <p class="footer-brand">
+        <strong>irona</strong> — MIT licensed, built with Rust &amp; Ratatui
+      </p>
+      <div class="footer-links">
+        <a
+          href="https://github.com/kunjee17/irona"
+          target="_blank"
+          rel="noopener"
+          aria-label="irona on GitHub"
+        >
+          <!-- GitHub mark SVG -->
+          <svg viewBox="0 0 24 24" aria-hidden="true">
+            <path d="M12 2C6.477 2 2 6.477 2 12c0 4.418 2.865 8.166 6.839 9.489.5.092.682-.217.682-.482
+              0-.237-.008-.866-.013-1.7-2.782.603-3.369-1.342-3.369-1.342-.454-1.155-1.11-1.462-1.11-1.462
+              -.908-.62.069-.608.069-.608 1.003.07 1.531 1.03 1.531 1.03.892 1.529 2.341 1.088 2.91.832
+              .092-.647.35-1.088.636-1.338-2.22-.253-4.555-1.11-4.555-4.943 0-1.091.39-1.984 1.029-2.683
+              -.103-.253-.446-1.27.098-2.647 0 0 .84-.269 2.75 1.025A9.578 9.578 0 0112 6.836a9.59 9.59 0
+              012.504.337c1.909-1.294 2.747-1.025 2.747-1.025.546 1.377.202 2.394.1 2.647.64.699 1.028
+              1.592 1.028 2.683 0 3.842-2.339 4.687-4.566 4.935.359.309.678.919.678 1.852 0 1.336-.012
+              2.415-.012 2.743 0 .267.18.578.688.48C19.138 20.163 22 16.418 22 12c0-5.523-4.477-10-10-10z"/>
+          </svg>
+          GitHub
+        </a>
+      </div>
+    </div>
+  </footer>
+
+  <script>
+    function copyInstall(btn) {
+      const cmd = 'cargo install irona';
+      navigator.clipboard.writeText(cmd).then(() => {
+        const fb = document.getElementById('copy-fb');
+        fb.classList.add('show');
+        setTimeout(() => fb.classList.remove('show'), 2000);
+      });
+    }
+  </script>
+
+</body>
+</html>
