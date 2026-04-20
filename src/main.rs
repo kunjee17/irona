@@ -89,7 +89,8 @@ fn run(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, root: PathBuf) -> 
                 if key.kind != KeyEventKind::Press {
                     continue;
                 }
-                match (&state.status, key.code) {
+                let status = state.status.clone();
+                match (status, key.code) {
                     (_, KeyCode::Char('q')) => break,
 
                     (AppStatus::Scanning | AppStatus::Ready, KeyCode::Up) => state.move_up(),
@@ -101,11 +102,13 @@ fn run(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, root: PathBuf) -> 
                         state.toggle_select_all()
                     }
 
-                    (AppStatus::Ready, KeyCode::Char('d')) if !state.selected.is_empty() => {
+                    (AppStatus::Scanning | AppStatus::Ready, KeyCode::Char('d')) => {
                         state.status = AppStatus::ConfirmDelete;
                     }
 
-                    (AppStatus::ConfirmDelete, KeyCode::Char('y')) => {
+                    (AppStatus::ConfirmDelete, KeyCode::Char('y'))
+                        if !state.selected.is_empty() =>
+                    {
                         state.status = AppStatus::Deleting;
                         terminal.draw(|f| ui::render(f, &state, &mut list_state))?;
                         let paths = state.selected_paths();
@@ -123,7 +126,8 @@ fn run(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, root: PathBuf) -> 
                         state.status = AppStatus::Ready;
                     }
 
-                    (AppStatus::ConfirmDelete, KeyCode::Char('n') | KeyCode::Esc) => {
+                    (AppStatus::ConfirmDelete, KeyCode::Char('n') | KeyCode::Esc)
+                    | (AppStatus::ConfirmDelete, KeyCode::Char('y')) => {
                         state.status = AppStatus::Ready;
                     }
 

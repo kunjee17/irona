@@ -7,6 +7,16 @@ use ratatui::{
     Frame,
 };
 
+fn header_style(status: &AppStatus) -> Style {
+    match status {
+        AppStatus::ConfirmDelete => Style::default()
+            .fg(Color::Yellow)
+            .add_modifier(Modifier::BOLD),
+        AppStatus::Deleting => Style::default().fg(Color::Red).add_modifier(Modifier::BOLD),
+        _ => Style::default(),
+    }
+}
+
 pub fn render(f: &mut Frame, state: &AppState, list_state: &mut ListState) {
     let chunks = Layout::default()
         .direction(Direction::Vertical)
@@ -31,7 +41,8 @@ pub fn render(f: &mut Frame, state: &AppState, list_state: &mut ListState) {
     };
 
     f.render_widget(
-        Paragraph::new(header_text).block(Block::default().borders(Borders::ALL).title(" irona ")),
+        Paragraph::new(Span::styled(header_text, header_style(&state.status)))
+            .block(Block::default().borders(Borders::ALL).title(" irona ")),
         chunks[0],
     );
 
@@ -73,13 +84,24 @@ pub fn render(f: &mut Frame, state: &AppState, list_state: &mut ListState) {
     );
 
     // Footer
+    let hint = match &state.status {
+        AppStatus::ConfirmDelete => Span::styled(
+            "  y  confirm delete    n / Esc  cancel",
+            Style::default().fg(Color::Yellow),
+        ),
+        AppStatus::Deleting => Span::styled(
+            "  deleting — please wait...",
+            Style::default().fg(Color::Red),
+        ),
+        _ => Span::raw("  ↑↓ navigate  Space select  a all  d delete  q quit"),
+    };
     f.render_widget(
         Paragraph::new(Line::from(vec![
             Span::styled(
                 format!("Selected: {}   ", format_bytes(state.selected_size_bytes())),
                 Style::default().fg(Color::Green),
             ),
-            Span::raw("↑↓ navigate  Space select  a all  d delete  q quit"),
+            hint,
         ]))
         .block(Block::default().borders(Borders::ALL)),
         chunks[2],

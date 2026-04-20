@@ -34,7 +34,6 @@ pub enum ScanMessage {
     Done,
 }
 
-
 /// Checks `dir` for marker files and returns artifact subdirectories found.
 /// Only returns a folder if its parent contains the expected marker — avoids
 /// false positives on unrelated folders named "bin" or "target".
@@ -66,7 +65,10 @@ pub fn detect_artifacts(dir: &std::path::Path) -> Vec<(PathBuf, Language)> {
     }
 
     // C#: *.csproj or *.sln -> bin/ and obj/
-    if names.iter().any(|n| n.ends_with(".csproj") || n.ends_with(".sln")) {
+    if names
+        .iter()
+        .any(|n| n.ends_with(".csproj") || n.ends_with(".sln"))
+    {
         for folder in &["bin", "obj"] {
             let p = dir.join(folder);
             if p.is_dir() {
@@ -108,7 +110,10 @@ pub fn scan(root: PathBuf, tx: Sender<ScanMessage>) {
                 return true;
             }
             let name = e.file_name().to_string_lossy();
-            !matches!(name.as_ref(), "target" | "node_modules" | "bin" | "obj" | ".git")
+            !matches!(
+                name.as_ref(),
+                "target" | "node_modules" | "bin" | "obj" | ".git"
+            )
         })
         .filter_map(|e| e.ok())
         .filter(|e| e.file_type().is_dir())
