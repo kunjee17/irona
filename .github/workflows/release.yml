@@ -82,7 +82,7 @@ jobs:
           Compress-Archive -Path ${{ matrix.binary }} -DestinationPath ${{ matrix.archive }}
 
       - name: Upload artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: ${{ matrix.archive }}
           path: ${{ matrix.archive }}
@@ -103,7 +103,7 @@ jobs:
         run: git cliff --current --output CHANGELOG.md
 
       - name: Download all artifacts
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v5
         with:
           path: artifacts
           merge-multiple: true
