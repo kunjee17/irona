@@ -1,6 +1,6 @@
 # irona
 
-A terminal UI tool for reclaiming disk space from build artifacts. Supports Rust (`target/`), Node.js (`node_modules/`), and C# (`bin/`, `obj/`) projects.
+A terminal UI tool for reclaiming disk space from build artifacts. Scans your project directories and lets you select and delete artifact folders for a wide range of languages and package managers.
 
 ## Install
 
@@ -41,6 +41,26 @@ cargo install --path .
 - **q / Esc** — quit
 
 irona scans your home directory for build artifact folders and shows their size. Select what you want to clean up and press `d` to delete.
+
+## Supported Languages
+
+| Language / Ecosystem | Marker file(s) | Artifact folder(s) |
+|---|---|---|
+| Rust | `Cargo.toml` | `target/` |
+| Node.js | `package.json` | `node_modules/` |
+| C# | `*.csproj`, `*.sln` | `bin/`, `obj/` |
+| .NET NuGet (packages.config) | `packages.config` | `packages/` |
+| .NET Paket | `paket.dependencies` | `packages/`, `.paket/` |
+| Python | `requirements.txt`, `pyproject.toml`, `setup.py` | `.venv/`, `venv/` |
+| Java (Maven) | `pom.xml` | `target/` |
+| Java / Kotlin / Android (Gradle) | `build.gradle`, `build.gradle.kts`, `settings.gradle*` | `build/`, `.gradle/` |
+| Go | `go.mod` | `vendor/` |
+| PHP (Composer) | `composer.json` | `vendor/` |
+| Ruby (Bundler) | `Gemfile` | `vendor/`, `.bundle/` |
+| Swift (SPM) | `Package.swift` | `.build/` |
+| Haskell (Stack) | `stack.yaml` | `.stack-work/` |
+| Elm | `elm.json` | `elm-stuff/` |
+| Dart / Flutter | `pubspec.yaml` | `.dart_tool/`, `build/` |
 
 ## Releasing
 

@@ -4,86 +4,92 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>irona — Reclaim your disk. Clean your workspace.</title>
-  <meta name="description" content="irona is a Rust TUI CLI tool that scans your workspace for build artifacts — Rust target/, Node node_modules/, C# bin/+obj/ — and lets you delete them interactively." />
+  <meta name="description" content="irona is a Rust TUI CLI tool that scans your workspace for build artifacts — Rust, Node.js, C#, Python, Go, PHP, Ruby, Swift, Gradle, Maven, Elm, Dart, Haskell, and .NET Paket/NuGet — and lets you delete them interactively." />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;700&display=swap" rel="stylesheet" />
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:ital,wght@0,300;0,400;0,500;0,700;1,300&display=swap" rel="stylesheet" />
 
   <style>
     /* ─── Design tokens ────────────────────────────────────────────────── */
     :root {
-      --bg:          #0d0d0d;
-      --surface:     #111111;
-      --surface-2:   #161616;
-      --border:      #1e1e1e;
-      --border-glow: #39ff1440;
-      --phosphor:    #39ff14;
-      --phosphor-dim: #27b30e;
-      --amber:       #ffb347;
-      --muted:       #4a4a4a;
-      --text:        #c8c8c8;
-      --white:       #f0f0f0;
-      --font:        'JetBrains Mono', 'Fira Code', 'Cascadia Code', monospace;
-      --space:       8px;
+      --bg:            #080808;
+      --surface:       #0f0f0f;
+      --surface-hover: #141414;
+      --border:        #252525;
+      --phosphor:      #39ff14;
+      --phosphor-dim:  #2ed410;
+      --phosphor-ghost: rgba(57, 255, 20, 0.06);
+      --amber:         #ffd080;
+      --text:          #d8d8d8;
+      --text-dim:      #909090;
+      --white:         #f4f4f4;
+      --font:          'JetBrains Mono', 'Fira Code', 'Cascadia Code', monospace;
+      --space:         8px;
+      --glow-sm:       0 0 16px rgba(57, 255, 20, 0.25);
+      --glow-md:       0 0 40px rgba(57, 255, 20, 0.35), 0 0 80px rgba(57, 255, 20, 0.12);
     }
 
     /* ─── Reset ────────────────────────────────────────────────────────── */
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-
-    html {
-      scroll-behavior: smooth;
-    }
+    html { scroll-behavior: smooth; }
 
     body {
       background: var(--bg);
       color: var(--text);
       font-family: var(--font);
       font-size: 14px;
-      line-height: 1.6;
+      line-height: 1.65;
       min-height: 100vh;
-      /* Subtle scanline texture */
-      background-image: repeating-linear-gradient(
-        0deg,
-        transparent,
-        transparent 2px,
-        rgba(255,255,255,0.008) 2px,
-        rgba(255,255,255,0.008) 4px
-      );
+      /* CRT scanline overlay */
+      background-image:
+        repeating-linear-gradient(
+          0deg,
+          transparent,
+          transparent 3px,
+          rgba(255,255,255,0.012) 3px,
+          rgba(255,255,255,0.012) 4px
+        );
     }
 
-    /* ─── Scrollbar ────────────────────────────────────────────────────── */
-    ::-webkit-scrollbar { width: 4px; }
+    /* ─── Scrollbar ─────────────────────────────────────────────────────── */
+    ::-webkit-scrollbar { width: 3px; }
     ::-webkit-scrollbar-track { background: var(--bg); }
     ::-webkit-scrollbar-thumb { background: var(--border); }
     ::-webkit-scrollbar-thumb:hover { background: var(--phosphor-dim); }
 
-    /* ─── Layout containers ────────────────────────────────────────────── */
+    /* ─── Layout ────────────────────────────────────────────────────────── */
     .container {
-      max-width: 860px;
+      max-width: 880px;
       margin: 0 auto;
       padding: 0 calc(var(--space) * 3);
     }
 
     section {
-      padding: calc(var(--space) * 10) 0;
+      padding: calc(var(--space) * 12) 0;
       border-bottom: 1px solid var(--border);
     }
 
-    section:last-of-type {
-      border-bottom: none;
-    }
+    section:last-of-type { border-bottom: none; }
 
-    /* ─── Section label (uppercase stamped label) ──────────────────────── */
+    /* ─── Section label — // prefixed terminal comment style ───────────── */
     .section-label {
-      font-size: 10px;
-      font-weight: 700;
-      letter-spacing: 0.25em;
+      font-size: 11px;
+      font-weight: 500;
+      letter-spacing: 0.22em;
       text-transform: uppercase;
-      color: var(--muted);
-      margin-bottom: calc(var(--space) * 5);
+      color: var(--text-dim);
+      margin-bottom: calc(var(--space) * 6);
       display: flex;
       align-items: center;
       gap: calc(var(--space) * 2);
+    }
+
+    .section-label::before {
+      content: '//';
+      color: var(--phosphor);
+      font-weight: 700;
+      letter-spacing: -0.02em;
+      flex-shrink: 0;
     }
 
     .section-label::after {
@@ -93,10 +99,15 @@
       background: var(--border);
     }
 
-    /* ─── Top bar ──────────────────────────────────────────────────────── */
+    /* ─── Top bar ───────────────────────────────────────────────────────── */
     .topbar {
+      position: sticky;
+      top: 0;
+      z-index: 100;
       border-bottom: 1px solid var(--border);
-      padding: calc(var(--space) * 2) 0;
+      background: rgba(8, 8, 8, 0.92);
+      backdrop-filter: blur(8px);
+      padding: calc(var(--space) * 2.5) 0;
     }
 
     .topbar .container {
@@ -106,78 +117,102 @@
     }
 
     .topbar-logo {
-      font-size: 13px;
+      font-size: 14px;
       font-weight: 700;
       color: var(--phosphor);
-      letter-spacing: 0.1em;
+      letter-spacing: 0.12em;
       text-decoration: none;
+      text-shadow: var(--glow-sm);
+    }
+
+    .topbar-logo::before {
+      content: '> ';
+      opacity: 0.6;
     }
 
     .topbar-nav {
       display: flex;
-      gap: calc(var(--space) * 4);
+      gap: calc(var(--space) * 5);
       list-style: none;
     }
 
     .topbar-nav a {
-      font-size: 11px;
-      color: var(--muted);
+      font-size: 12px;
+      font-weight: 400;
+      color: var(--text-dim);
       text-decoration: none;
       letter-spacing: 0.1em;
       text-transform: uppercase;
-      transition: color 120ms;
+      padding-bottom: 3px;
+      border-bottom: 1px solid transparent;
+      transition: color 150ms, border-color 150ms;
     }
 
-    .topbar-nav a:hover { color: var(--text); }
+    .topbar-nav a:hover {
+      color: var(--phosphor);
+      border-bottom-color: var(--phosphor);
+    }
 
-    /* ─── Hero ─────────────────────────────────────────────────────────── */
+    /* ─── Hero ──────────────────────────────────────────────────────────── */
     #hero {
-      padding: calc(var(--space) * 16) 0 calc(var(--space) * 12);
-      border-bottom: 1px solid var(--border);
+      padding: calc(var(--space) * 18) 0 calc(var(--space) * 14);
     }
 
     .hero-eyebrow {
       font-size: 11px;
-      color: var(--phosphor);
-      letter-spacing: 0.2em;
-      text-transform: uppercase;
-      margin-bottom: calc(var(--space) * 3);
+      font-style: italic;
+      color: var(--text-dim);
+      letter-spacing: 0.15em;
+      margin-bottom: calc(var(--space) * 4);
       opacity: 0;
-      animation: fade-up 400ms 100ms forwards;
+      animation: fade-up 500ms 80ms forwards;
     }
 
     .hero-title {
-      font-size: clamp(52px, 8vw, 88px);
+      font-size: clamp(64px, 12vw, 112px);
       font-weight: 700;
-      color: var(--white);
-      line-height: 1;
-      letter-spacing: -0.02em;
-      margin-bottom: calc(var(--space) * 3);
-      opacity: 0;
-      animation: fade-up 400ms 200ms forwards;
-    }
-
-    /* The phosphor accent on the title */
-    .hero-title span {
       color: var(--phosphor);
-      position: relative;
+      line-height: 0.9;
+      letter-spacing: -0.03em;
+      margin-bottom: calc(var(--space) * 5);
+      text-shadow: var(--glow-md);
+      opacity: 0;
+      animation: fade-up 500ms 160ms forwards;
     }
 
     .hero-tagline {
-      font-size: 18px;
+      font-size: 20px;
       font-weight: 300;
-      color: var(--text);
-      max-width: 480px;
-      margin-bottom: calc(var(--space) * 8);
+      color: var(--white);
+      max-width: 440px;
+      line-height: 1.5;
+      margin-bottom: calc(var(--space) * 5);
       opacity: 0;
-      animation: fade-up 400ms 300ms forwards;
+      animation: fade-up 500ms 240ms forwards;
     }
 
-    /* ─── Install command ──────────────────────────────────────────────── */
+    /* Animated scan-progress — the memorable anchor */
+    .hero-scan {
+      font-size: 12px;
+      color: var(--text-dim);
+      margin-bottom: calc(var(--space) * 8);
+      height: 20px;
+      opacity: 0;
+      animation: fade-up 500ms 320ms forwards;
+    }
+
+    .scan-text { color: var(--phosphor-dim); }
+    .scan-count { color: var(--amber); font-weight: 700; }
+
+    /* ─── Install block ─────────────────────────────────────────────────── */
     .install-block {
       opacity: 0;
-      animation: fade-up 400ms 400ms forwards;
-      margin-bottom: calc(var(--space) * 4);
+      animation: fade-up 500ms 400ms forwards;
+      margin-bottom: calc(var(--space) * 5);
+      display: flex;
+      align-items: center;
+      gap: calc(var(--space) * 3);
+      flex-wrap: wrap;
     }
 
     .prompt-line {
@@ -186,31 +221,19 @@
       gap: 0;
       background: var(--surface);
       border: 1px solid var(--border);
-      padding: calc(var(--space) * 2) calc(var(--space) * 3);
-      position: relative;
+      padding: calc(var(--space) * 2.5) calc(var(--space) * 3.5);
       cursor: pointer;
+      position: relative;
       transition: border-color 150ms, box-shadow 150ms;
-      /* Left accent bar */
-    }
-
-    .prompt-line::before {
-      content: '';
-      position: absolute;
-      left: 0;
-      top: 0;
-      bottom: 0;
-      width: 3px;
-      background: var(--phosphor);
+      border-left: 3px solid var(--phosphor);
     }
 
     .prompt-line:hover {
       border-color: var(--phosphor-dim);
-      box-shadow: 0 0 16px var(--border-glow);
+      box-shadow: var(--glow-sm);
     }
 
-    .prompt-line:hover .copy-hint {
-      opacity: 1;
-    }
+    .prompt-line:hover .copy-hint { opacity: 1; }
 
     .prompt-dollar {
       color: var(--phosphor);
@@ -221,40 +244,38 @@
 
     .prompt-cmd {
       color: var(--amber);
-      font-size: 15px;
+      font-size: 14px;
       letter-spacing: 0.02em;
     }
 
-    /* blinking cursor after the command */
     .prompt-cursor {
       display: inline-block;
-      width: 9px;
-      height: 16px;
+      width: 8px;
+      height: 15px;
       background: var(--phosphor);
-      margin-left: 4px;
+      margin-left: 5px;
       vertical-align: middle;
-      animation: blink 1s step-end infinite;
+      animation: blink 1.1s step-end infinite;
     }
 
     .copy-hint {
       font-size: 10px;
-      color: var(--muted);
+      color: var(--text-dim);
       text-transform: uppercase;
       letter-spacing: 0.15em;
-      margin-left: calc(var(--space) * 4);
+      margin-left: calc(var(--space) * 3);
       opacity: 0;
       transition: opacity 150ms;
       user-select: none;
     }
 
     .copy-feedback {
-      font-size: 10px;
+      font-size: 11px;
       color: var(--phosphor);
+      letter-spacing: 0.12em;
       text-transform: uppercase;
-      letter-spacing: 0.15em;
-      margin-left: calc(var(--space) * 2);
       opacity: 0;
-      transition: opacity 150ms;
+      transition: opacity 200ms;
     }
 
     .copy-feedback.show { opacity: 1; }
@@ -265,7 +286,7 @@
       gap: calc(var(--space) * 4);
       flex-wrap: wrap;
       opacity: 0;
-      animation: fade-up 400ms 500ms forwards;
+      animation: fade-up 500ms 480ms forwards;
     }
 
     .btn-release {
@@ -273,19 +294,19 @@
       align-items: center;
       gap: calc(var(--space) * 1.5);
       font-family: var(--font);
-      font-size: 12px;
+      font-size: 11px;
       font-weight: 500;
-      letter-spacing: 0.08em;
+      letter-spacing: 0.1em;
       text-transform: uppercase;
       color: var(--text);
       text-decoration: none;
       border: 1px solid var(--border);
-      padding: calc(var(--space) * 1.5) calc(var(--space) * 3);
-      transition: border-color 150ms, color 150ms;
+      padding: calc(var(--space) * 2) calc(var(--space) * 3);
+      transition: border-color 150ms, color 150ms, box-shadow 150ms;
     }
 
     .btn-release:hover {
-      border-color: var(--text);
+      border-color: var(--text-dim);
       color: var(--white);
     }
 
@@ -297,10 +318,10 @@
 
     .hero-hint {
       font-size: 11px;
-      color: var(--muted);
+      color: var(--text-dim);
     }
 
-    /* ─── How it works ─────────────────────────────────────────────────── */
+    /* ─── Steps / How it works ──────────────────────────────────────────── */
     .steps {
       display: grid;
       grid-template-columns: 1fr;
@@ -313,90 +334,94 @@
       background: var(--surface);
       padding: calc(var(--space) * 5) calc(var(--space) * 5);
       display: grid;
-      grid-template-columns: 48px 1fr;
+      grid-template-columns: 52px 1fr;
       gap: calc(var(--space) * 4);
       align-items: start;
       transition: background 150ms;
     }
 
-    .step:hover {
-      background: var(--surface-2);
-    }
+    .step:hover { background: var(--surface-hover); }
 
     .step-number {
-      font-size: 11px;
+      font-size: 12px;
       font-weight: 700;
       color: var(--phosphor);
-      letter-spacing: 0.1em;
-      padding-top: 2px;
+      letter-spacing: 0.05em;
+      padding-top: 3px;
+      font-style: italic;
     }
 
-    .step-body {}
-
     .step-title {
-      font-size: 13px;
+      font-size: 14px;
       font-weight: 700;
       color: var(--white);
-      letter-spacing: 0.05em;
-      margin-bottom: calc(var(--space) * 1.5);
+      letter-spacing: 0.04em;
+      margin-bottom: calc(var(--space) * 2);
     }
 
     .step-desc {
       font-size: 13px;
       color: var(--text);
-      line-height: 1.7;
+      line-height: 1.75;
     }
 
     .step-code {
       display: inline-block;
       background: var(--bg);
       color: var(--amber);
-      padding: 2px 6px;
-      font-size: 12px;
+      padding: 1px 7px;
+      font-size: 13px;
       border: 1px solid var(--border);
+      font-family: var(--font);
     }
 
     .step-key {
       display: inline-block;
-      background: var(--border);
+      background: #1a1a1a;
       color: var(--white);
-      padding: 1px 8px;
+      padding: 0 9px;
       font-size: 12px;
       font-weight: 700;
-      border: 1px solid var(--muted);
-      border-bottom-width: 2px;
+      border: 1px solid #383838;
+      border-bottom: 2px solid #444;
+      font-family: var(--font);
+      line-height: 1.8;
     }
 
-    /* TUI preview mockup */
+    /* ─── TUI preview ───────────────────────────────────────────────────── */
     .tui-preview {
       margin-top: calc(var(--space) * 3);
-      background: var(--bg);
+      background: #040404;
       border: 1px solid var(--border);
-      padding: calc(var(--space) * 3);
+      border-left: 3px solid var(--phosphor-dim);
+      padding: calc(var(--space) * 3) calc(var(--space) * 3);
       font-size: 12px;
-      line-height: 1.8;
+      line-height: 2;
       overflow-x: auto;
     }
 
     .tui-line { white-space: pre; }
     .tui-checked { color: var(--phosphor); }
-    .tui-unchecked { color: var(--muted); }
+    .tui-unchecked { color: #444; }
     .tui-size { color: var(--amber); }
     .tui-path { color: var(--text); }
     .tui-selected {
-      background: rgba(57, 255, 20, 0.1);
+      background: rgba(57, 255, 20, 0.08);
       color: var(--white);
+      display: block;
     }
     .tui-hint {
-      color: var(--muted);
+      color: var(--text-dim);
       font-size: 11px;
-      margin-top: calc(var(--space) * 1);
+      margin-top: calc(var(--space) * 1.5);
+      border-top: 1px solid var(--border);
+      padding-top: calc(var(--space) * 1.5);
     }
 
-    /* ─── Supported languages ──────────────────────────────────────────── */
+    /* ─── Language cards ────────────────────────────────────────────────── */
     .langs {
       display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
       gap: 1px;
       background: var(--border);
       border: 1px solid var(--border);
@@ -404,45 +429,52 @@
 
     .lang-card {
       background: var(--surface);
-      padding: calc(var(--space) * 5);
+      padding: calc(var(--space) * 4) calc(var(--space) * 4);
       transition: background 150ms;
+      border-left: 2px solid transparent;
     }
 
     .lang-card:hover {
-      background: var(--surface-2);
+      background: var(--surface-hover);
+      border-left-color: var(--phosphor);
     }
 
     .lang-icon {
-      width: 32px;
-      height: 32px;
-      margin-bottom: calc(var(--space) * 3);
+      width: 28px;
+      height: 28px;
+      margin-bottom: calc(var(--space) * 2.5);
+      opacity: 0.85;
+      transition: opacity 150ms;
     }
+
+    .lang-card:hover .lang-icon { opacity: 1; }
 
     .lang-name {
       font-size: 13px;
       font-weight: 700;
       color: var(--white);
-      letter-spacing: 0.05em;
+      letter-spacing: 0.04em;
       margin-bottom: calc(var(--space) * 1.5);
     }
 
     .lang-dirs {
       display: flex;
       flex-wrap: wrap;
-      gap: calc(var(--space) * 1);
+      gap: calc(var(--space) * 0.75);
     }
 
     .dir-badge {
       font-size: 11px;
       color: var(--amber);
-      background: var(--bg);
-      border: 1px solid var(--border);
-      padding: 2px calc(var(--space) * 1.5);
+      background: rgba(255, 208, 128, 0.06);
+      border: 1px solid rgba(255, 208, 128, 0.2);
+      padding: 1px calc(var(--space) * 1.5);
+      letter-spacing: 0.02em;
     }
 
-    /* ─── Footer ───────────────────────────────────────────────────────── */
+    /* ─── Footer ────────────────────────────────────────────────────────── */
     footer {
-      padding: calc(var(--space) * 6) 0;
+      padding: calc(var(--space) * 7) 0;
       border-top: 1px solid var(--border);
     }
 
@@ -456,7 +488,7 @@
 
     .footer-brand {
       font-size: 12px;
-      color: var(--muted);
+      color: var(--text-dim);
       letter-spacing: 0.05em;
     }
 
@@ -476,7 +508,7 @@
       align-items: center;
       gap: calc(var(--space) * 1.5);
       font-size: 12px;
-      color: var(--muted);
+      color: var(--text-dim);
       text-decoration: none;
       letter-spacing: 0.08em;
       text-transform: uppercase;
@@ -486,28 +518,71 @@
     .footer-links a:hover { color: var(--white); }
 
     .footer-links svg {
-      width: 16px; height: 16px;
+      width: 15px; height: 15px;
       fill: currentColor;
     }
 
-    /* ─── Animations ───────────────────────────────────────────────────── */
+    /* ─── Animations ────────────────────────────────────────────────────── */
     @keyframes blink {
       0%, 100% { opacity: 1; }
       50%       { opacity: 0; }
     }
 
     @keyframes fade-up {
-      from { opacity: 0; transform: translateY(12px); }
+      from { opacity: 0; transform: translateY(14px); }
       to   { opacity: 1; transform: translateY(0); }
     }
 
-    /* ─── Responsive ───────────────────────────────────────────────────── */
+    @keyframes scan-progress {
+      0%   { width: 0%; }
+      60%  { width: 100%; }
+      100% { width: 100%; }
+    }
+
+    @keyframes count-up {
+      0%   { opacity: 0; }
+      55%  { opacity: 0; }
+      70%  { opacity: 1; }
+      100% { opacity: 1; }
+    }
+
+    .scan-bar-wrap {
+      display: inline-flex;
+      align-items: center;
+      gap: calc(var(--space) * 2);
+      font-size: 11px;
+    }
+
+    .scan-bar-track {
+      width: 120px;
+      height: 3px;
+      background: var(--border);
+      overflow: hidden;
+    }
+
+    .scan-bar-fill {
+      height: 100%;
+      background: var(--phosphor);
+      width: 0%;
+      animation: scan-progress 2.4s 900ms cubic-bezier(.4,0,.2,1) forwards;
+      box-shadow: 0 0 6px var(--phosphor);
+    }
+
+    .scan-count {
+      color: var(--amber);
+      font-weight: 700;
+      animation: count-up 2.4s 900ms forwards;
+    }
+
+    /* ─── Responsive ────────────────────────────────────────────────────── */
     @media (max-width: 600px) {
       .topbar-nav { display: none; }
-      .step {
-        grid-template-columns: 32px 1fr;
-        gap: calc(var(--space) * 2);
-      }
+      .step { grid-template-columns: 36px 1fr; gap: calc(var(--space) * 2); }
+      .langs { grid-template-columns: 1fr 1fr; }
+      .hero-title { letter-spacing: -0.04em; }
+    }
+
+    @media (max-width: 400px) {
       .langs { grid-template-columns: 1fr; }
     }
   </style>
@@ -522,6 +597,7 @@
         <ul class="topbar-nav">
           <li><a href="#how-it-works">How it works</a></li>
           <li><a href="#languages">Languages</a></li>
+          <li><a href="#download">Download</a></li>
           <li><a href="https://github.com/kunjee17/irona" target="_blank" rel="noopener">GitHub</a></li>
         </ul>
       </nav>
@@ -533,15 +609,25 @@
     <!-- ── Hero ──────────────────────────────────────────────────────── -->
     <section id="hero" aria-labelledby="hero-heading">
       <div class="container">
+
         <p class="hero-eyebrow">Rust TUI · build artifact cleaner · named after Richie Rich's robot maid</p>
 
-        <h1 class="hero-title" id="hero-heading">
-          <span>irona</span>
-        </h1>
+        <h1 class="hero-title" id="hero-heading">irona</h1>
 
         <p class="hero-tagline">
           Reclaim your disk.<br>Clean your workspace.
         </p>
+
+        <!-- Animated scan bar — the memorable design anchor -->
+        <div class="hero-scan" aria-hidden="true">
+          <span class="scan-bar-wrap">
+            <span class="scan-text">scanning ~/projects</span>
+            <span class="scan-bar-track">
+              <span class="scan-bar-fill"></span>
+            </span>
+            <span class="scan-count">14 artifacts found</span>
+          </span>
+        </div>
 
         <div class="install-block">
           <button
@@ -572,15 +658,16 @@
             </svg>
             Pre-built binaries
           </a>
-          <span class="hero-hint">or build from source with Cargo 1.70+</span>
+          <span class="hero-hint">or build from source — Cargo 1.70+</span>
         </div>
+
       </div>
     </section>
 
     <!-- ── How it works ───────────────────────────────────────────────── -->
     <section id="how-it-works" aria-labelledby="how-heading">
       <div class="container">
-        <p class="section-label">How it works</p>
+        <p class="section-label" id="how-heading">How it works</p>
 
         <div class="steps" role="list">
 
@@ -591,7 +678,7 @@
               <p class="step-desc">
                 Run <code class="step-code">irona /your/workspace</code> — irona walks the
                 directory tree and finds every build artifact directory it knows about.
-                No config, no manifest — it just works.
+                No config, no manifest. It just works.
               </p>
             </div>
           </article>
@@ -607,9 +694,8 @@
                 Nothing is touched until you say so.
               </p>
 
-              <!-- Inline TUI mock -->
-              <div class="tui-preview" aria-label="Terminal UI preview showing build artifact directories with sizes" role="img">
-                <div class="tui-line tui-selected">  <span class="tui-checked">▶ [✓]</span> <span class="tui-path">~/projects/my-app/target</span>             <span class="tui-size">4.2 GB</span></div>
+              <div class="tui-preview" aria-label="Terminal UI preview showing artifact directories" role="img">
+                <span class="tui-line tui-selected">  <span class="tui-checked">▶ [✓]</span> <span class="tui-path">~/projects/my-app/target</span>             <span class="tui-size">4.2 GB</span></span>
                 <div class="tui-line">    <span class="tui-checked">[✓]</span> <span class="tui-path">~/projects/website/node_modules</span>          <span class="tui-size">812 MB</span></div>
                 <div class="tui-line">    <span class="tui-unchecked">[ ]</span> <span class="tui-path">~/projects/dotnet-api/bin</span>               <span class="tui-size">340 MB</span></div>
                 <div class="tui-line">    <span class="tui-unchecked">[ ]</span> <span class="tui-path">~/projects/dotnet-api/obj</span>               <span class="tui-size"> 98 MB</span></div>
@@ -624,9 +710,9 @@
             <div class="step-body">
               <h3 class="step-title">Press <span class="step-key">d</span> to delete</h3>
               <p class="step-desc">
-                irona removes every checked directory. That's it.
-                Disk space reclaimed. Press <span class="step-key">q</span> to quit.
-                Re-build artifacts are regenerated by your toolchain whenever you need them again.
+                irona removes every checked directory. Disk space reclaimed.
+                Press <span class="step-key">q</span> to quit.
+                Build artifacts are regenerated by your toolchain whenever you need them again.
               </p>
             </div>
           </article>
@@ -644,7 +730,6 @@
 
           <!-- Rust -->
           <article class="lang-card">
-            <!-- Rust gear logo — inline SVG, monochrome phosphor -->
             <svg class="lang-icon" viewBox="0 0 32 32" fill="none" aria-hidden="true">
               <circle cx="16" cy="16" r="5" stroke="#39ff14" stroke-width="1.5"/>
               <path d="M16 4v4M16 24v4M4 16h4M24 16h4" stroke="#39ff14" stroke-width="1.5" stroke-linecap="round"/>
@@ -659,7 +744,6 @@
 
           <!-- Node.js -->
           <article class="lang-card">
-            <!-- Node hexagon logo — inline SVG -->
             <svg class="lang-icon" viewBox="0 0 32 32" fill="none" aria-hidden="true">
               <path d="M16 3L29 10.5v15L16 29 3 24.5v-15L16 3z"
                 stroke="#39ff14" stroke-width="1.5" stroke-linejoin="round"/>
@@ -674,7 +758,6 @@
 
           <!-- C# / .NET -->
           <article class="lang-card">
-            <!-- .NET diamond logo — inline SVG -->
             <svg class="lang-icon" viewBox="0 0 32 32" fill="none" aria-hidden="true">
               <path d="M16 3l13 13-13 13L3 16 16 3z"
                 stroke="#39ff14" stroke-width="1.5" stroke-linejoin="round"/>
@@ -687,97 +770,237 @@
             </div>
           </article>
 
+          <!-- .NET NuGet / Paket -->
+          <article class="lang-card">
+            <svg class="lang-icon" viewBox="0 0 32 32" fill="none" aria-hidden="true">
+              <rect x="6" y="6" width="8" height="8" stroke="#39ff14" stroke-width="1.5" stroke-linejoin="round"/>
+              <rect x="18" y="6" width="8" height="8" stroke="#39ff14" stroke-width="1.5" stroke-linejoin="round"/>
+              <rect x="6" y="18" width="8" height="8" stroke="#39ff14" stroke-width="1.5" stroke-linejoin="round"/>
+              <rect x="18" y="18" width="8" height="8" stroke="#39ff14" stroke-width="1.5" stroke-linejoin="round"/>
+            </svg>
+            <h3 class="lang-name">NuGet / Paket</h3>
+            <div class="lang-dirs">
+              <span class="dir-badge">packages/</span>
+              <span class="dir-badge">.paket/</span>
+            </div>
+          </article>
+
+          <!-- Python -->
+          <article class="lang-card">
+            <svg class="lang-icon" viewBox="0 0 32 32" fill="none" aria-hidden="true">
+              <path d="M16 4C10 4 7 7 7 11v2h9v1H7c-3 0-4 2-4 5s2 5 4 5h2v-3c0-3 2-5 7-5s7 2 7 5v3h2c2 0 4-2 4-5s-1-5-4-5h-9v-1h9v-2c0-4-3-7-9-7z"
+                stroke="#39ff14" stroke-width="1.2" stroke-linejoin="round"/>
+              <circle cx="12" cy="10" r="1.2" fill="#39ff14"/>
+              <circle cx="20" cy="22" r="1.2" fill="#39ff14"/>
+            </svg>
+            <h3 class="lang-name">Python</h3>
+            <div class="lang-dirs">
+              <span class="dir-badge">.venv/</span>
+              <span class="dir-badge">venv/</span>
+            </div>
+          </article>
+
+          <!-- Java / Maven -->
+          <article class="lang-card">
+            <svg class="lang-icon" viewBox="0 0 32 32" fill="none" aria-hidden="true">
+              <path d="M12 4h8l4 4v16l-4 4H12l-4-4V8l4-4z" stroke="#39ff14" stroke-width="1.5" stroke-linejoin="round"/>
+              <path d="M16 10v8M13 15l3 3 3-3" stroke="#39ff14" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+            <h3 class="lang-name">Java / Maven</h3>
+            <div class="lang-dirs">
+              <span class="dir-badge">target/</span>
+            </div>
+          </article>
+
+          <!-- Gradle -->
+          <article class="lang-card">
+            <svg class="lang-icon" viewBox="0 0 32 32" fill="none" aria-hidden="true">
+              <path d="M6 10c0-2 2-4 5-4s5 2 5 4-2 4-5 4-5-2-5-4z" stroke="#39ff14" stroke-width="1.5"/>
+              <path d="M16 22c0-2 2-4 5-4s5 2 5 4-2 4-5 4-5-2-5-4z" stroke="#39ff14" stroke-width="1.5"/>
+              <path d="M16 10h4M12 22H8" stroke="#39ff14" stroke-width="1.5" stroke-linecap="round"/>
+            </svg>
+            <h3 class="lang-name">Gradle</h3>
+            <div class="lang-dirs">
+              <span class="dir-badge">build/</span>
+              <span class="dir-badge">.gradle/</span>
+            </div>
+          </article>
+
+          <!-- Go -->
+          <article class="lang-card">
+            <svg class="lang-icon" viewBox="0 0 32 32" fill="none" aria-hidden="true">
+              <path d="M4 14h6c1 0 2 1 2 2s-1 2-2 2H8" stroke="#39ff14" stroke-width="1.5" stroke-linecap="round"/>
+              <path d="M14 14h8a4 4 0 010 8h-8V14z" stroke="#39ff14" stroke-width="1.5" stroke-linejoin="round"/>
+              <circle cx="22" cy="18" r="1.5" fill="#39ff14"/>
+            </svg>
+            <h3 class="lang-name">Go</h3>
+            <div class="lang-dirs">
+              <span class="dir-badge">vendor/</span>
+            </div>
+          </article>
+
+          <!-- PHP -->
+          <article class="lang-card">
+            <svg class="lang-icon" viewBox="0 0 32 32" fill="none" aria-hidden="true">
+              <ellipse cx="16" cy="16" rx="13" ry="7" stroke="#39ff14" stroke-width="1.5"/>
+              <path d="M10 13v6M10 16h5c1.5 0 2.5-1 2.5-2s-1-2-2.5-2" stroke="#39ff14" stroke-width="1.5" stroke-linecap="round"/>
+              <path d="M19 13v6M19 16h4" stroke="#39ff14" stroke-width="1.5" stroke-linecap="round"/>
+            </svg>
+            <h3 class="lang-name">PHP</h3>
+            <div class="lang-dirs">
+              <span class="dir-badge">vendor/</span>
+            </div>
+          </article>
+
+          <!-- Ruby -->
+          <article class="lang-card">
+            <svg class="lang-icon" viewBox="0 0 32 32" fill="none" aria-hidden="true">
+              <path d="M16 4l10 6v12l-10 6L6 22V10L16 4z" stroke="#39ff14" stroke-width="1.5" stroke-linejoin="round"/>
+              <path d="M16 4v24M6 10l20 12M26 10L6 22" stroke="#39ff14" stroke-width="1" stroke-linejoin="round" opacity="0.35"/>
+            </svg>
+            <h3 class="lang-name">Ruby</h3>
+            <div class="lang-dirs">
+              <span class="dir-badge">vendor/</span>
+              <span class="dir-badge">.bundle/</span>
+            </div>
+          </article>
+
+          <!-- Swift -->
+          <article class="lang-card">
+            <svg class="lang-icon" viewBox="0 0 32 32" fill="none" aria-hidden="true">
+              <path d="M26 8C20 4 10 6 7 14c-2 5 1 9 4 11-2-3-2-6 0-9 3 4 8 6 13 5-2-2-4-5-3-8 3 3 7 5 5 13 3-2 5-7 4-12-1-3-3-5-4-6z"
+                stroke="#39ff14" stroke-width="1.3" stroke-linejoin="round"/>
+            </svg>
+            <h3 class="lang-name">Swift / SPM</h3>
+            <div class="lang-dirs">
+              <span class="dir-badge">.build/</span>
+            </div>
+          </article>
+
+          <!-- Haskell -->
+          <article class="lang-card">
+            <svg class="lang-icon" viewBox="0 0 32 32" fill="none" aria-hidden="true">
+              <path d="M4 8l8 8-8 8" stroke="#39ff14" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+              <path d="M10 8l8 8-8 8" stroke="#39ff14" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+              <path d="M18 13h10M18 19h10" stroke="#39ff14" stroke-width="1.5" stroke-linecap="round"/>
+            </svg>
+            <h3 class="lang-name">Haskell</h3>
+            <div class="lang-dirs">
+              <span class="dir-badge">.stack-work/</span>
+            </div>
+          </article>
+
+          <!-- Elm -->
+          <article class="lang-card">
+            <svg class="lang-icon" viewBox="0 0 32 32" fill="none" aria-hidden="true">
+              <path d="M16 4L28 16 16 28 4 16 16 4z" stroke="#39ff14" stroke-width="1.5" stroke-linejoin="round"/>
+              <path d="M16 4L4 16h24L16 4z" stroke="#39ff14" stroke-width="1" stroke-linejoin="round" opacity="0.35"/>
+            </svg>
+            <h3 class="lang-name">Elm</h3>
+            <div class="lang-dirs">
+              <span class="dir-badge">elm-stuff/</span>
+            </div>
+          </article>
+
+          <!-- Dart / Flutter -->
+          <article class="lang-card">
+            <svg class="lang-icon" viewBox="0 0 32 32" fill="none" aria-hidden="true">
+              <path d="M18 3L29 14l-7 1-11-8 7-7z" stroke="#39ff14" stroke-width="1.3" stroke-linejoin="round"/>
+              <path d="M3 19l9-9 9 9-9 9-9-9z" stroke="#39ff14" stroke-width="1.3" stroke-linejoin="round"/>
+            </svg>
+            <h3 class="lang-name">Dart / Flutter</h3>
+            <div class="lang-dirs">
+              <span class="dir-badge">.dart_tool/</span>
+              <span class="dir-badge">build/</span>
+            </div>
+          </article>
+
         </div>
       </div>
     </section>
 
   </main>
 
-    <!-- ── Download ──────────────────────────────────────────────────── -->
-    <section id="download" aria-labelledby="download-heading">
-      <div class="container">
-        <p class="section-label" id="download-heading">Download</p>
+  <!-- ── Download ────────────────────────────────────────────────────── -->
+  <section id="download" aria-labelledby="download-heading">
+    <div class="container">
+      <p class="section-label" id="download-heading">Download</p>
 
-        <div class="steps" role="list">
-          <article class="step" role="listitem">
-            <div class="step-number" aria-hidden="true">→</div>
-            <div class="step-body">
-              <h3 class="step-title">crates.io</h3>
-              <p class="step-desc">
-                Install via Cargo — the binary is named <code class="step-code">irona</code>, the crate is <code class="step-code">irona-cli</code>.
-              </p>
-              <div style="margin-top:12px">
-                <code class="step-code">$ cargo install irona-cli</code>
-              </div>
-            </div>
-          </article>
-          <article class="step" role="listitem">
-            <div class="step-number" aria-hidden="true">→</div>
-            <div class="step-body">
-              <h3 class="step-title">Pre-built binaries</h3>
-              <p class="step-desc" style="margin-bottom:16px">
-                Download from <a href="https://github.com/kunjee17/irona/releases" target="_blank" rel="noopener" style="color:var(--phosphor)">GitHub Releases</a> — no Rust toolchain needed.
-              </p>
-              <div class="langs" style="background:var(--bg)">
-                <div class="lang-card" style="padding:12px 16px">
-                  <div class="lang-name" style="font-size:11px;margin-bottom:8px">Linux</div>
-                  <div class="lang-dirs">
-                    <span class="dir-badge">x64 .tar.gz</span>
-                    <span class="dir-badge">x64-musl .tar.gz</span>
-                    <span class="dir-badge">ARM64 .tar.gz</span>
-                  </div>
-                </div>
-                <div class="lang-card" style="padding:12px 16px">
-                  <div class="lang-name" style="font-size:11px;margin-bottom:8px">macOS</div>
-                  <div class="lang-dirs">
-                    <span class="dir-badge">Apple Silicon .tar.gz</span>
-                    <span class="dir-badge">Intel .tar.gz</span>
-                  </div>
-                </div>
-                <div class="lang-card" style="padding:12px 16px">
-                  <div class="lang-name" style="font-size:11px;margin-bottom:8px">Windows</div>
-                  <div class="lang-dirs">
-                    <span class="dir-badge">x64 .zip</span>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </article>
-        </div>
-      </div>
-    </section>
-
-    <!-- ── Name origin ────────────────────────────────────────────────── -->
-    <section id="about" aria-labelledby="about-heading">
-      <div class="container">
-        <p class="section-label" id="about-heading">About the name</p>
-        <div class="step" style="border:1px solid var(--border)">
-          <div class="step-number" aria-hidden="true">✦</div>
+      <div class="steps" role="list">
+        <article class="step" role="listitem">
+          <div class="step-number" aria-hidden="true">→</div>
           <div class="step-body">
+            <h3 class="step-title">crates.io</h3>
             <p class="step-desc">
-              <strong style="color:var(--white)">Irona</strong> is the loyal robotic maid from the Richie Rich comic series —
-              always tidying up, always efficient. That's exactly what this tool does for your workspace.
-              Named in her honour.
+              Install via Cargo — the binary is named <code class="step-code">irona</code>, the crate is <code class="step-code">irona-cli</code>.
             </p>
+            <div style="margin-top:14px">
+              <code class="step-code">$ cargo install irona-cli</code>
+            </div>
           </div>
+        </article>
+
+        <article class="step" role="listitem">
+          <div class="step-number" aria-hidden="true">→</div>
+          <div class="step-body">
+            <h3 class="step-title">Pre-built binaries</h3>
+            <p class="step-desc" style="margin-bottom:16px">
+              Download from <a href="https://github.com/kunjee17/irona/releases" target="_blank" rel="noopener" style="color:var(--phosphor);text-decoration:none;border-bottom:1px solid var(--phosphor-dim)">GitHub Releases</a> — no Rust toolchain needed.
+            </p>
+            <div class="langs" style="background:var(--bg)">
+              <div class="lang-card" style="padding:12px 16px">
+                <div class="lang-name" style="font-size:11px;margin-bottom:8px;color:var(--text-dim)">Linux</div>
+                <div class="lang-dirs">
+                  <span class="dir-badge">x64 .tar.gz</span>
+                  <span class="dir-badge">x64-musl .tar.gz</span>
+                  <span class="dir-badge">ARM64 .tar.gz</span>
+                </div>
+              </div>
+              <div class="lang-card" style="padding:12px 16px">
+                <div class="lang-name" style="font-size:11px;margin-bottom:8px;color:var(--text-dim)">macOS</div>
+                <div class="lang-dirs">
+                  <span class="dir-badge">Apple Silicon .tar.gz</span>
+                  <span class="dir-badge">Intel .tar.gz</span>
+                </div>
+              </div>
+              <div class="lang-card" style="padding:12px 16px">
+                <div class="lang-name" style="font-size:11px;margin-bottom:8px;color:var(--text-dim)">Windows</div>
+                <div class="lang-dirs">
+                  <span class="dir-badge">x64 .zip</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </article>
+      </div>
+    </div>
+  </section>
+
+  <!-- ── Name origin ──────────────────────────────────────────────────── -->
+  <section id="about" aria-labelledby="about-heading">
+    <div class="container">
+      <p class="section-label" id="about-heading">About the name</p>
+      <div class="step" style="border:1px solid var(--border)">
+        <div class="step-number" aria-hidden="true">✦</div>
+        <div class="step-body">
+          <p class="step-desc">
+            <strong style="color:var(--white)">Irona</strong> is the loyal robotic maid from the Richie Rich comic series —
+            always tidying up, always efficient. That's exactly what this tool does for your workspace.
+            Named in her honour.
+          </p>
         </div>
       </div>
-    </section>
+    </div>
+  </section>
 
-  <!-- ── Footer ────────────────────────────────────────────────────────── -->
+  <!-- ── Footer ──────────────────────────────────────────────────────── -->
   <footer role="contentinfo">
     <div class="container">
       <p class="footer-brand">
-        <strong>irona</strong> — MIT licensed, built with Rust &amp; Ratatui
+        <strong>irona</strong> — MIT licensed · built with Rust &amp; Ratatui
       </p>
       <div class="footer-links">
-        <a
-          href="https://github.com/kunjee17/irona"
-          target="_blank"
-          rel="noopener"
-          aria-label="irona on GitHub"
-        >
-          <!-- GitHub mark SVG -->
+        <a href="https://github.com/kunjee17/irona" target="_blank" rel="noopener" aria-label="irona on GitHub">
           <svg viewBox="0 0 24 24" aria-hidden="true">
             <path d="M12 2C6.477 2 2 6.477 2 12c0 4.418 2.865 8.166 6.839 9.489.5.092.682-.217.682-.482
               0-.237-.008-.866-.013-1.7-2.782.603-3.369-1.342-3.369-1.342-.454-1.155-1.11-1.462-1.11-1.462
@@ -789,6 +1012,12 @@
               2.415-.012 2.743 0 .267.18.578.688.48C19.138 20.163 22 16.418 22 12c0-5.523-4.477-10-10-10z"/>
           </svg>
           GitHub
+        </a>
+        <a href="https://crates.io/crates/irona-cli" target="_blank" rel="noopener" aria-label="irona-cli on crates.io">
+          <svg viewBox="0 0 24 24" aria-hidden="true">
+            <path d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"/>
+          </svg>
+          crates.io
         </a>
       </div>
     </div>
