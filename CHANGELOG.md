@@ -2,11 +2,29 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.3.0] - 2026-04-22
+
+### Documentation
+
+- Update landing page — irona-cli install, binaries table, name origin
+
+### Features
+
+- Add 11 new language scanners and redesign landing page
+
+### Miscellaneous
+
+- Update actions to Node.js 24 compatible versions
+
 ## [0.2.1] - 2026-04-22
 
 ### Bug Fixes
 
 - Rename crate to irona-cli for crates.io (irona taken)
+
+### Miscellaneous
+
+- Release v0.2.1
 
 ## [0.2.0] - 2026-04-22
 
