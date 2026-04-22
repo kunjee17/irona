@@ -533,7 +533,7 @@
     <!-- ── Hero ──────────────────────────────────────────────────────── -->
     <section id="hero" aria-labelledby="hero-heading">
       <div class="container">
-        <p class="hero-eyebrow">Rust TUI · build artifact cleaner</p>
+        <p class="hero-eyebrow">Rust TUI · build artifact cleaner · named after Richie Rich's robot maid</p>
 
         <h1 class="hero-title" id="hero-heading">
           <span>irona</span>
@@ -547,11 +547,11 @@
           <button
             class="prompt-line"
             onclick="copyInstall(this)"
-            aria-label="Copy install command: cargo install irona"
+            aria-label="Copy install command: cargo install irona-cli"
             title="Click to copy"
           >
             <span class="prompt-dollar" aria-hidden="true">$</span>
-            <span class="prompt-cmd">cargo install irona</span>
+            <span class="prompt-cmd">cargo install irona-cli</span>
             <span class="prompt-cursor" aria-hidden="true"></span>
             <span class="copy-hint" aria-hidden="true">click to copy</span>
           </button>
@@ -693,6 +693,77 @@
 
   </main>
 
+    <!-- ── Download ──────────────────────────────────────────────────── -->
+    <section id="download" aria-labelledby="download-heading">
+      <div class="container">
+        <p class="section-label" id="download-heading">Download</p>
+
+        <div class="steps" role="list">
+          <article class="step" role="listitem">
+            <div class="step-number" aria-hidden="true">→</div>
+            <div class="step-body">
+              <h3 class="step-title">crates.io</h3>
+              <p class="step-desc">
+                Install via Cargo — the binary is named <code class="step-code">irona</code>, the crate is <code class="step-code">irona-cli</code>.
+              </p>
+              <div style="margin-top:12px">
+                <code class="step-code">$ cargo install irona-cli</code>
+              </div>
+            </div>
+          </article>
+          <article class="step" role="listitem">
+            <div class="step-number" aria-hidden="true">→</div>
+            <div class="step-body">
+              <h3 class="step-title">Pre-built binaries</h3>
+              <p class="step-desc" style="margin-bottom:16px">
+                Download from <a href="https://github.com/kunjee17/irona/releases" target="_blank" rel="noopener" style="color:var(--phosphor)">GitHub Releases</a> — no Rust toolchain needed.
+              </p>
+              <div class="langs" style="background:var(--bg)">
+                <div class="lang-card" style="padding:12px 16px">
+                  <div class="lang-name" style="font-size:11px;margin-bottom:8px">Linux</div>
+                  <div class="lang-dirs">
+                    <span class="dir-badge">x64 .tar.gz</span>
+                    <span class="dir-badge">x64-musl .tar.gz</span>
+                    <span class="dir-badge">ARM64 .tar.gz</span>
+                  </div>
+                </div>
+                <div class="lang-card" style="padding:12px 16px">
+                  <div class="lang-name" style="font-size:11px;margin-bottom:8px">macOS</div>
+                  <div class="lang-dirs">
+                    <span class="dir-badge">Apple Silicon .tar.gz</span>
+                    <span class="dir-badge">Intel .tar.gz</span>
+                  </div>
+                </div>
+                <div class="lang-card" style="padding:12px 16px">
+                  <div class="lang-name" style="font-size:11px;margin-bottom:8px">Windows</div>
+                  <div class="lang-dirs">
+                    <span class="dir-badge">x64 .zip</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </article>
+        </div>
+      </div>
+    </section>
+
+    <!-- ── Name origin ────────────────────────────────────────────────── -->
+    <section id="about" aria-labelledby="about-heading">
+      <div class="container">
+        <p class="section-label" id="about-heading">About the name</p>
+        <div class="step" style="border:1px solid var(--border)">
+          <div class="step-number" aria-hidden="true">✦</div>
+          <div class="step-body">
+            <p class="step-desc">
+              <strong style="color:var(--white)">Irona</strong> is the loyal robotic maid from the Richie Rich comic series —
+              always tidying up, always efficient. That's exactly what this tool does for your workspace.
+              Named in her honour.
+            </p>
+          </div>
+        </div>
+      </div>
+    </section>
+
   <!-- ── Footer ────────────────────────────────────────────────────────── -->
   <footer role="contentinfo">
     <div class="container">
@@ -725,7 +796,7 @@
 
   <script>
     function copyInstall(btn) {
-      const cmd = 'cargo install irona';
+      const cmd = 'cargo install irona-cli';
       navigator.clipboard.writeText(cmd).then(() => {
         const fb = document.getElementById('copy-fb');
         fb.classList.add('show');
