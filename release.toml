@@ -1,0 +1,7 @@
+pre-release-hook = ["git-cliff", "--tag", "v{{version}}", "--output", "CHANGELOG.md"]
+pre-release-commit-message = "chore: release v{{version}}"
+tag-name = "v{{version}}"
+tag-message = "Release v{{version}}"
+push = true
+publish = false
+allow-branch = ["main"]

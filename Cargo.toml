@@ -2,6 +2,11 @@
 name = "irona"
 version = "0.1.0"
 edition = "2021"
+description = "A terminal UI tool for reclaiming disk space from build artifacts"
+license = "MIT"
+repository = "https://github.com/kunjee17/irona"
+keywords = ["tui", "cli", "disk", "cleanup", "artifacts"]
+categories = ["command-line-utilities"]
 
 [[bin]]
 name = "irona"
