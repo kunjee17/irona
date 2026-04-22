@@ -2,6 +2,12 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.3.1] - 2026-04-22
+
+### Miscellaneous
+
+- Add pre-commit hook (fmt, clippy, build) via cargo-husky
+
 ## [0.3.0] - 2026-04-22
 
 ### Documentation
@@ -15,6 +21,7 @@ All notable changes to this project will be documented in this file.
 ### Miscellaneous
 
 - Update actions to Node.js 24 compatible versions
+- Release v0.3.0
 
 ## [0.2.1] - 2026-04-22
 
