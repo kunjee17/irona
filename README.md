@@ -22,7 +22,7 @@ Extract and place the binary somewhere on your `PATH`.
 ### From crates.io
 
 ```bash
-cargo install irona
+cargo install irona-cli
 ```
 
 ### From source
