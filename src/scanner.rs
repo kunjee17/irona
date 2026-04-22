@@ -11,7 +11,7 @@ pub enum Language {
     Maven,
     Gradle,
     Go,
-    PHP,
+    Php,
     Ruby,
     Swift,
     Haskell,
@@ -30,7 +30,7 @@ impl std::fmt::Display for Language {
             Language::Maven => write!(f, "Maven"),
             Language::Gradle => write!(f, "Gradle"),
             Language::Go => write!(f, "Go"),
-            Language::PHP => write!(f, "PHP"),
+            Language::Php => write!(f, "PHP"),
             Language::Ruby => write!(f, "Ruby"),
             Language::Swift => write!(f, "Swift"),
             Language::Haskell => write!(f, "Haskell"),
@@ -166,7 +166,7 @@ pub fn detect_artifacts(dir: &std::path::Path) -> Vec<(PathBuf, Language)> {
     if names.iter().any(|n| n == "composer.json") {
         let p = dir.join("vendor");
         if p.is_dir() {
-            found.push((p, Language::PHP));
+            found.push((p, Language::Php));
         }
     }
 
@@ -341,7 +341,11 @@ mod tests {
     #[test]
     fn detects_dotnet_paket() {
         let tmp = TempDir::new().unwrap();
-        fs::write(tmp.path().join("paket.dependencies"), "source https://nuget.org/api/v2").unwrap();
+        fs::write(
+            tmp.path().join("paket.dependencies"),
+            "source https://nuget.org/api/v2",
+        )
+        .unwrap();
         fs::create_dir(tmp.path().join("packages")).unwrap();
         fs::create_dir(tmp.path().join(".paket")).unwrap();
         let results = detect_artifacts(tmp.path());
@@ -399,7 +403,7 @@ mod tests {
         fs::create_dir(tmp.path().join("vendor")).unwrap();
         let results = detect_artifacts(tmp.path());
         assert_eq!(results.len(), 1);
-        assert_eq!(results[0].1, Language::PHP);
+        assert_eq!(results[0].1, Language::Php);
     }
 
     #[test]
@@ -416,7 +420,11 @@ mod tests {
     #[test]
     fn detects_swift_build() {
         let tmp = TempDir::new().unwrap();
-        fs::write(tmp.path().join("Package.swift"), "// swift-tools-version:5.5").unwrap();
+        fs::write(
+            tmp.path().join("Package.swift"),
+            "// swift-tools-version:5.5",
+        )
+        .unwrap();
         fs::create_dir(tmp.path().join(".build")).unwrap();
         let results = detect_artifacts(tmp.path());
         assert_eq!(results.len(), 1);

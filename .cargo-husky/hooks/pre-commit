@@ -1,0 +1,13 @@
+#!/bin/sh
+set -e
+
+echo "→ fmt"
+cargo fmt --all -- --check
+
+echo "→ clippy"
+cargo clippy --all-targets -- -D warnings
+
+echo "→ build"
+cargo build --quiet
+
+echo "→ ok"
