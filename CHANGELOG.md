@@ -2,6 +2,12 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.2.1] - 2026-04-22
+
+### Bug Fixes
+
+- Rename crate to irona-cli for crates.io (irona taken)
+
 ## [0.2.0] - 2026-04-22
 
 ### Bug Fixes
@@ -29,6 +35,7 @@ All notable changes to this project will be documented in this file.
 
 - Add CLAUDE.md and .gitignore
 - Add release pipeline, versioning, and cross-platform binaries
+- Release v0.2.0
 
 ### Other
 
