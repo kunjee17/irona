@@ -2,11 +2,18 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.4.0] - 2026-04-25
+
+### Features
+
+- Add gitignore-aware smart scan ([#13](https://github.com/kunjee17/irona/issues/13))
+
 ## [0.3.1] - 2026-04-22
 
 ### Miscellaneous
 
 - Add pre-commit hook (fmt, clippy, build) via cargo-husky
+- Release v0.3.1
 
 ## [0.3.0] - 2026-04-22
 
