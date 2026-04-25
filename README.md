@@ -1,6 +1,6 @@
 # irona
 
-A terminal UI tool for reclaiming disk space from build artifacts. Scans your project directories and lets you select and delete artifact folders for a wide range of languages and package managers.
+A terminal UI tool for reclaiming disk space from build artifacts. Scans your project directories and lets you select and delete artifact folders for a wide range of languages and package managers. Also does a `.gitignore`-aware pass to catch any project-specific artifact directories not covered by the built-in language rules.
 
 ## Install
 
@@ -37,6 +37,7 @@ cargo install --path .
 
 - **↑ / ↓** — navigate entries
 - **Space** — select / deselect entry
+- **a** — select / deselect all
 - **d** — delete selected entries
 - **q / Esc** — quit
 
@@ -61,6 +62,16 @@ irona scans your home directory for build artifact folders and shows their size.
 | Haskell (Stack) | `stack.yaml` | `.stack-work/` |
 | Elm | `elm.json` | `elm-stuff/` |
 | Dart / Flutter | `pubspec.yaml` | `.dart_tool/`, `build/` |
+
+## Gitignore-aware scan
+
+In addition to the language rules above, irona walks every `.gitignore` file it encounters and surfaces any matching directories that exist on disk. This covers build outputs not hardcoded in irona — things like `dist/`, `out/`, `.cache/`, `coverage/`, `.next/`, or any project-specific pattern your `.gitignore` already documents.
+
+Each entry in the list is labelled with its source (`Rust`, `Node.js`, `gitignore`, etc.) so you can see at a glance where it was found.
+
+Directories that should never be deleted are excluded regardless of what `.gitignore` says: `.git`, `.vscode`, `.idea`, `.github`.
+
+If a directory is found by both a language rule and a `.gitignore` pattern, it appears once and is attributed to the language rule.
 
 ## Releasing
 

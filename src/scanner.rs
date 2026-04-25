@@ -1,5 +1,12 @@
+use std::cell::RefCell;
+use std::collections::HashSet;
 use std::fs;
 use std::path::PathBuf;
+
+use crossbeam_channel::Sender;
+use ignore::gitignore::GitignoreBuilder;
+use rayon::prelude::*;
+use walkdir::WalkDir;
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Language {
@@ -17,6 +24,7 @@ pub enum Language {
     Haskell,
     Elm,
     Dart,
+    GitIgnore,
 }
 
 impl std::fmt::Display for Language {
@@ -36,6 +44,7 @@ impl std::fmt::Display for Language {
             Language::Haskell => write!(f, "Haskell"),
             Language::Elm => write!(f, "Elm"),
             Language::Dart => write!(f, "Dart"),
+            Language::GitIgnore => write!(f, "gitignore"),
         }
     }
 }
@@ -217,9 +226,55 @@ pub fn detect_artifacts(dir: &std::path::Path) -> Vec<(PathBuf, Language)> {
     found
 }
 
-use crossbeam_channel::Sender;
-use rayon::prelude::*;
-use walkdir::WalkDir;
+const GITIGNORE_DENYLIST: &[&str] = &[".git", ".vscode", ".idea", ".github"];
+
+fn detect_gitignore_artifacts(
+    dir: &std::path::Path,
+    already_found: &HashSet<PathBuf>,
+) -> Vec<(PathBuf, Language)> {
+    let mut found = Vec::new();
+
+    let gitignore_path = dir.join(".gitignore");
+    if !gitignore_path.is_file() {
+        return found;
+    }
+
+    let mut builder = GitignoreBuilder::new(dir);
+    if builder.add(&gitignore_path).is_some() {
+        return found;
+    }
+    let Ok(gitignore) = builder.build() else {
+        return found;
+    };
+
+    let children = match fs::read_dir(dir) {
+        Ok(c) => c,
+        Err(_) => return found,
+    };
+
+    for child in children.filter_map(|e| e.ok()) {
+        let Ok(ft) = child.file_type() else { continue };
+        if !ft.is_dir() {
+            continue;
+        }
+        let path = child.path();
+        let name = match path.file_name().and_then(|n| n.to_str()) {
+            Some(n) => n,
+            None => continue,
+        };
+        if GITIGNORE_DENYLIST.contains(&name) {
+            continue;
+        }
+        if already_found.contains(&path) {
+            continue;
+        }
+        if gitignore.matched(&path, true).is_ignore() {
+            found.push((path, Language::GitIgnore));
+        }
+    }
+
+    found
+}
 
 /// Sums sizes of all files under `path` recursively.
 pub fn dir_size(path: &std::path::Path) -> u64 {
@@ -237,7 +292,10 @@ pub fn scan(root: PathBuf, tx: Sender<ScanMessage>) {
     // Phase 1: walkdir to collect candidate artifact paths (fast — metadata only).
     // filter_entry skips descending INTO known artifact dirs, preventing
     // redundant deep traversal of e.g. target/ which can be millions of files.
+    // found_paths is shared with filter_entry via RefCell so gitignore-matched
+    // dirs are also pruned from traversal as they are discovered.
     let mut candidates: Vec<(PathBuf, Language)> = Vec::new();
+    let found_paths: RefCell<HashSet<PathBuf>> = RefCell::new(HashSet::new());
 
     for entry in WalkDir::new(&root)
         .follow_links(false)
@@ -245,6 +303,9 @@ pub fn scan(root: PathBuf, tx: Sender<ScanMessage>) {
         .filter_entry(|e| {
             if !e.file_type().is_dir() {
                 return true;
+            }
+            if found_paths.borrow().contains(e.path()) {
+                return false;
             }
             let name = e.file_name().to_string_lossy();
             !matches!(
@@ -271,7 +332,26 @@ pub fn scan(root: PathBuf, tx: Sender<ScanMessage>) {
         .filter_map(|e| e.ok())
         .filter(|e| e.file_type().is_dir())
     {
-        candidates.extend(detect_artifacts(entry.path()));
+        let dir = entry.path();
+        let lang_hits = detect_artifacts(dir);
+        {
+            let mut fp = found_paths.borrow_mut();
+            for (path, _) in &lang_hits {
+                fp.insert(path.clone());
+            }
+        }
+        let gi_hits = {
+            let fp = found_paths.borrow();
+            detect_gitignore_artifacts(dir, &fp)
+        };
+        {
+            let mut fp = found_paths.borrow_mut();
+            for (path, _) in &gi_hits {
+                fp.insert(path.clone());
+            }
+        }
+        candidates.extend(lang_hits);
+        candidates.extend(gi_hits);
     }
 
     // Phase 2: rayon calculates sizes in parallel, sends each result immediately.
@@ -492,5 +572,76 @@ mod tests {
         fs::write(tmp.path().join("a.txt"), "hello").unwrap(); // 5 bytes
         fs::write(tmp.path().join("b.txt"), "world!").unwrap(); // 6 bytes
         assert_eq!(dir_size(tmp.path()), 11);
+    }
+
+    #[test]
+    fn gitignore_detects_matching_dir() {
+        let tmp = TempDir::new().unwrap();
+        fs::write(tmp.path().join(".gitignore"), "dist/\n").unwrap();
+        fs::create_dir(tmp.path().join("dist")).unwrap();
+        let results = detect_gitignore_artifacts(tmp.path(), &HashSet::new());
+        assert_eq!(results.len(), 1);
+        assert_eq!(results[0].1, Language::GitIgnore);
+        assert!(results[0].0.ends_with("dist"));
+    }
+
+    #[test]
+    fn gitignore_ignores_nonexistent_dir() {
+        let tmp = TempDir::new().unwrap();
+        fs::write(tmp.path().join(".gitignore"), "dist/\n").unwrap();
+        let results = detect_gitignore_artifacts(tmp.path(), &HashSet::new());
+        assert!(results.is_empty());
+    }
+
+    #[test]
+    fn gitignore_skips_denylist() {
+        let tmp = TempDir::new().unwrap();
+        fs::write(tmp.path().join(".gitignore"), ".vscode/\n.idea/\n").unwrap();
+        fs::create_dir(tmp.path().join(".vscode")).unwrap();
+        fs::create_dir(tmp.path().join(".idea")).unwrap();
+        let results = detect_gitignore_artifacts(tmp.path(), &HashSet::new());
+        assert!(results.is_empty());
+    }
+
+    #[test]
+    fn gitignore_skips_already_found_paths() {
+        let tmp = TempDir::new().unwrap();
+        fs::write(tmp.path().join(".gitignore"), "target/\n").unwrap();
+        let target = tmp.path().join("target");
+        fs::create_dir(&target).unwrap();
+        let mut already = HashSet::new();
+        already.insert(target);
+        let results = detect_gitignore_artifacts(tmp.path(), &already);
+        assert!(results.is_empty());
+    }
+
+    #[test]
+    fn scan_deduplicates_lang_and_gitignore_for_same_dir() {
+        let tmp = TempDir::new().unwrap();
+        fs::write(tmp.path().join("Cargo.toml"), "[package]").unwrap();
+        fs::write(tmp.path().join(".gitignore"), "target/\n").unwrap();
+        fs::create_dir(tmp.path().join("target")).unwrap();
+
+        let (tx, rx) = crossbeam_channel::unbounded();
+        scan(tmp.path().to_path_buf(), tx);
+
+        let mut entries: Vec<ArtifactEntry> = Vec::new();
+        for msg in rx {
+            match msg {
+                ScanMessage::Found(e) => entries.push(e),
+                ScanMessage::Done => break,
+            }
+        }
+
+        assert_eq!(entries.len(), 1, "target/ should appear exactly once");
+        assert_eq!(entries[0].language, Language::Rust);
+    }
+
+    #[test]
+    fn gitignore_no_file_returns_empty() {
+        let tmp = TempDir::new().unwrap();
+        fs::create_dir(tmp.path().join("dist")).unwrap();
+        let results = detect_gitignore_artifacts(tmp.path(), &HashSet::new());
+        assert!(results.is_empty());
     }
 }

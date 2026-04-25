@@ -120,7 +120,6 @@ fn render_list(
                 .parent()
                 .unwrap_or(&row.entry.path)
                 .to_string_lossy();
-
             let (check, right_col, right_style) = match &row.delete_state {
                 DeleteState::Pending => (
                     if row.selected { "[✓]" } else { "[ ]" },
@@ -146,7 +145,11 @@ fn render_list(
             ListItem::new(Line::from(vec![
                 Span::raw(format!(" {} ", check)),
                 Span::styled(format!("{:<15}", name), Style::default().fg(Color::Cyan)),
-                Span::raw(format!("  {:<45}", parent)),
+                Span::raw(format!("  {:<33}", parent)),
+                Span::styled(
+                    format!("{:<12}", row.entry.language),
+                    Style::default().fg(Color::DarkGray),
+                ),
                 Span::styled(format!("{:>12}", right_col), right_style),
             ]))
         })
