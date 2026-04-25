@@ -8,6 +8,10 @@ All notable changes to this project will be documented in this file.
 
 - Add gitignore-aware smart scan ([#13](https://github.com/kunjee17/irona/issues/13))
 
+### Miscellaneous
+
+- Update changelog for v0.4.0
+
 ## [0.3.1] - 2026-04-22
 
 ### Miscellaneous
