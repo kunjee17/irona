@@ -2,6 +2,8 @@
 
 A terminal UI tool for reclaiming disk space from build artifacts. Scans your project directories and lets you select and delete artifact folders for a wide range of languages and package managers. Also does a `.gitignore`-aware pass to catch any project-specific artifact directories not covered by the built-in language rules.
 
+![irona demo](demo.gif)
+
 ## Install
 
 ### Pre-built binaries
