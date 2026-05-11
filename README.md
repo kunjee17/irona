@@ -45,6 +45,37 @@ cargo install --path .
 
 irona scans your home directory for build artifact folders and shows their size. Select what you want to clean up and press `d` to delete.
 
+### MCP server
+
+irona can also run as a stdio [Model Context Protocol](https://modelcontextprotocol.io) server for AI tools:
+
+Install irona and make sure Cargo's bin directory is on your `PATH`:
+
+```bash
+cargo install irona-cli
+export PATH="$HOME/.cargo/bin:$PATH"
+```
+
+Using `irona` from `PATH` keeps MCP client configs portable and avoids hardcoding a local binary path such as `/home/alice/.cargo/bin/irona`.
+
+```json
+{
+  "mcpServers": {
+    "irona": {
+      "command": "irona",
+      "args": ["--mcp"]
+    }
+  }
+}
+```
+
+The MCP server exposes two tools:
+
+| Tool | Description |
+|---|---|
+| `scan_artifacts` | Scan a path and return artifact directories with sizes and detected language/source |
+| `clean_artifacts` | Delete a provided list of artifact directories and return per-path results plus freed bytes |
+
 ## Supported Languages
 
 | Language / Ecosystem | Marker file(s) | Artifact folder(s) |

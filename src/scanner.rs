@@ -287,8 +287,7 @@ pub fn dir_size(path: &std::path::Path) -> u64 {
         .sum()
 }
 
-#[allow(dead_code)]
-pub fn scan(root: PathBuf, tx: Sender<ScanMessage>) {
+pub fn scan_artifacts(root: &std::path::Path) -> Vec<ArtifactEntry> {
     // Phase 1: walkdir to collect candidate artifact paths (fast — metadata only).
     // filter_entry skips descending INTO known artifact dirs, preventing
     // redundant deep traversal of e.g. target/ which can be millions of files.
@@ -297,7 +296,7 @@ pub fn scan(root: PathBuf, tx: Sender<ScanMessage>) {
     let mut candidates: Vec<(PathBuf, Language)> = Vec::new();
     let found_paths: RefCell<HashSet<PathBuf>> = RefCell::new(HashSet::new());
 
-    for entry in WalkDir::new(&root)
+    for entry in WalkDir::new(root)
         .follow_links(false)
         .into_iter()
         .filter_entry(|e| {
@@ -354,16 +353,22 @@ pub fn scan(root: PathBuf, tx: Sender<ScanMessage>) {
         candidates.extend(gi_hits);
     }
 
-    // Phase 2: rayon calculates sizes in parallel, sends each result immediately.
-    candidates.par_iter().for_each(|(path, language)| {
-        let size_bytes = dir_size(path);
-        tx.send(ScanMessage::Found(ArtifactEntry {
+    // Phase 2: rayon calculates sizes in parallel.
+    candidates
+        .par_iter()
+        .map(|(path, language)| ArtifactEntry {
             path: path.clone(),
             language: language.clone(),
-            size_bytes,
-        }))
-        .ok();
-    });
+            size_bytes: dir_size(path),
+        })
+        .collect()
+}
+
+#[allow(dead_code)]
+pub fn scan(root: PathBuf, tx: Sender<ScanMessage>) {
+    for entry in scan_artifacts(&root) {
+        tx.send(ScanMessage::Found(entry)).ok();
+    }
 
     tx.send(ScanMessage::Done).ok();
 }
