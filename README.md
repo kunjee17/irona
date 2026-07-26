@@ -76,6 +76,8 @@ The MCP server exposes two tools:
 | `scan_artifacts` | Scan a path and return artifact directories with sizes and detected language/source |
 | `clean_artifacts` | Delete a provided list of artifact directories and return per-path results plus freed bytes |
 
+`clean_artifacts` refuses any path irona would not itself classify as an artifact. A directory only qualifies if a marker file sits beside it (`target/` next to a `Cargo.toml`) or a `.gitignore` rule matches it. Handing it an arbitrary path fails the whole call and deletes nothing, so a wrong path from the model cannot take out your work.
+
 ## Supported Languages
 
 | Language / Ecosystem | Marker file(s) | Artifact folder(s) |

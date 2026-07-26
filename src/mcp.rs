@@ -217,6 +217,14 @@ fn clean_artifacts(arguments: &Value) -> Result<Value, String> {
             return Err("clean_artifacts paths must all be strings".to_string());
         };
         let path = PathBuf::from(path);
+        let path = path.canonicalize().unwrap_or(path);
+        if !scanner::is_artifact(&path) {
+            return Err(format!(
+                "refusing to delete {}: not a build artifact directory. \
+                 Only paths returned by scan_artifacts can be cleaned.",
+                path.display()
+            ));
+        }
         sizes.push(scanner::dir_size(&path));
         original_paths.push(path.clone());
         delete_inputs.push((index, path));
@@ -273,7 +281,7 @@ fn clean_artifacts(arguments: &Value) -> Result<Value, String> {
             paths.len(),
             if paths.len() == 1 { "y" } else { "ies" },
         ),
-        false,
+        deleted_count < paths.len(),
     ))
 }
 
@@ -424,8 +432,88 @@ mod tests {
     }
 
     #[test]
+    fn refuses_to_clean_non_artifact_directory() {
+        let tmp = TempDir::new().unwrap();
+        let documents = tmp.path().join("my-documents");
+        fs::create_dir(&documents).unwrap();
+        fs::write(documents.join("thesis.txt"), "important").unwrap();
+
+        let response = handle_message(json!({
+            "jsonrpc": "2.0",
+            "id": 1,
+            "method": "tools/call",
+            "params": {
+                "name": "clean_artifacts",
+                "arguments": {
+                    "paths": [documents.to_string_lossy()]
+                }
+            }
+        }))
+        .unwrap();
+
+        assert!(response["error"]["message"]
+            .as_str()
+            .unwrap()
+            .contains("not a build artifact directory"));
+        assert!(documents.exists());
+    }
+
+    #[test]
+    fn refuses_whole_batch_when_one_path_is_not_an_artifact() {
+        let tmp = TempDir::new().unwrap();
+        fs::write(tmp.path().join("Cargo.toml"), "[package]").unwrap();
+        let artifact = tmp.path().join("target");
+        fs::create_dir(&artifact).unwrap();
+        let documents = tmp.path().join("my-documents");
+        fs::create_dir(&documents).unwrap();
+
+        let response = handle_message(json!({
+            "jsonrpc": "2.0",
+            "id": 1,
+            "method": "tools/call",
+            "params": {
+                "name": "clean_artifacts",
+                "arguments": {
+                    "paths": [artifact.to_string_lossy(), documents.to_string_lossy()]
+                }
+            }
+        }))
+        .unwrap();
+
+        assert!(response["error"].is_object());
+        assert!(artifact.exists());
+        assert!(documents.exists());
+    }
+
+    #[test]
+    fn cleans_gitignore_detected_artifacts() {
+        let tmp = TempDir::new().unwrap();
+        fs::write(tmp.path().join(".gitignore"), "dist/\n").unwrap();
+        let dist = tmp.path().join("dist");
+        fs::create_dir(&dist).unwrap();
+        fs::write(dist.join("bundle.js"), "data").unwrap();
+
+        let response = handle_message(json!({
+            "jsonrpc": "2.0",
+            "id": 1,
+            "method": "tools/call",
+            "params": {
+                "name": "clean_artifacts",
+                "arguments": {
+                    "paths": [dist.to_string_lossy()]
+                }
+            }
+        }))
+        .unwrap();
+
+        assert_eq!(response["result"]["structuredContent"]["deleted_count"], 1);
+        assert!(!dist.exists());
+    }
+
+    #[test]
     fn cleans_requested_artifacts() {
         let tmp = TempDir::new().unwrap();
+        fs::write(tmp.path().join("Cargo.toml"), "[package]").unwrap();
         let artifact = tmp.path().join("target");
         fs::create_dir(&artifact).unwrap();
         fs::write(artifact.join("artifact.bin"), "data").unwrap();
