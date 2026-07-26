@@ -287,8 +287,7 @@ pub fn dir_size(path: &std::path::Path) -> u64 {
         .sum()
 }
 
-#[allow(dead_code)]
-pub fn scan(root: PathBuf, tx: Sender<ScanMessage>) {
+fn collect_candidates(root: &std::path::Path) -> Vec<(PathBuf, Language)> {
     // Phase 1: walkdir to collect candidate artifact paths (fast — metadata only).
     // filter_entry skips descending INTO known artifact dirs, preventing
     // redundant deep traversal of e.g. target/ which can be millions of files.
@@ -297,7 +296,7 @@ pub fn scan(root: PathBuf, tx: Sender<ScanMessage>) {
     let mut candidates: Vec<(PathBuf, Language)> = Vec::new();
     let found_paths: RefCell<HashSet<PathBuf>> = RefCell::new(HashSet::new());
 
-    for entry in WalkDir::new(&root)
+    for entry in WalkDir::new(root)
         .follow_links(false)
         .into_iter()
         .filter_entry(|e| {
@@ -354,16 +353,51 @@ pub fn scan(root: PathBuf, tx: Sender<ScanMessage>) {
         candidates.extend(gi_hits);
     }
 
-    // Phase 2: rayon calculates sizes in parallel, sends each result immediately.
-    candidates.par_iter().for_each(|(path, language)| {
-        let size_bytes = dir_size(path);
-        tx.send(ScanMessage::Found(ArtifactEntry {
+    candidates
+}
+
+/// Confirms `path` is a directory the scanner itself would classify as an
+/// artifact. Destructive callers that accept paths from outside — the MCP
+/// `clean_artifacts` tool — gate on this so an arbitrary directory can never
+/// be handed to `remove_dir_all`.
+pub fn is_artifact(path: &std::path::Path) -> bool {
+    let Some(parent) = path.parent() else {
+        return false;
+    };
+    if detect_artifacts(parent).iter().any(|(p, _)| p == path) {
+        return true;
+    }
+    detect_gitignore_artifacts(parent, &HashSet::new())
+        .iter()
+        .any(|(p, _)| p == path)
+}
+
+pub fn scan_artifacts(root: &std::path::Path) -> Vec<ArtifactEntry> {
+    // Phase 2: rayon calculates sizes in parallel.
+    collect_candidates(root)
+        .par_iter()
+        .map(|(path, language)| ArtifactEntry {
             path: path.clone(),
             language: language.clone(),
-            size_bytes,
-        }))
-        .ok();
-    });
+            size_bytes: dir_size(path),
+        })
+        .collect()
+}
+
+#[allow(dead_code)]
+pub fn scan(root: PathBuf, tx: Sender<ScanMessage>) {
+    // Phase 2 streams each entry as its size lands, so the TUI fills in while
+    // dir_size is still walking the remaining candidates.
+    collect_candidates(&root)
+        .par_iter()
+        .for_each(|(path, language)| {
+            tx.send(ScanMessage::Found(ArtifactEntry {
+                path: path.clone(),
+                language: language.clone(),
+                size_bytes: dir_size(path),
+            }))
+            .ok();
+        });
 
     tx.send(ScanMessage::Done).ok();
 }
@@ -643,5 +677,62 @@ mod tests {
         fs::create_dir(tmp.path().join("dist")).unwrap();
         let results = detect_gitignore_artifacts(tmp.path(), &HashSet::new());
         assert!(results.is_empty());
+    }
+
+    #[test]
+    fn is_artifact_accepts_marker_backed_dir() {
+        let tmp = TempDir::new().unwrap();
+        fs::write(tmp.path().join("Cargo.toml"), "[package]").unwrap();
+        fs::create_dir(tmp.path().join("target")).unwrap();
+        assert!(is_artifact(&tmp.path().join("target")));
+    }
+
+    #[test]
+    fn is_artifact_accepts_gitignore_matched_dir() {
+        let tmp = TempDir::new().unwrap();
+        fs::write(tmp.path().join(".gitignore"), "dist/\n").unwrap();
+        fs::create_dir(tmp.path().join("dist")).unwrap();
+        assert!(is_artifact(&tmp.path().join("dist")));
+    }
+
+    #[test]
+    fn is_artifact_rejects_plain_directory() {
+        let tmp = TempDir::new().unwrap();
+        fs::create_dir(tmp.path().join("my-documents")).unwrap();
+        assert!(!is_artifact(&tmp.path().join("my-documents")));
+    }
+
+    #[test]
+    fn is_artifact_rejects_target_without_cargo_toml() {
+        let tmp = TempDir::new().unwrap();
+        fs::create_dir(tmp.path().join("target")).unwrap();
+        assert!(!is_artifact(&tmp.path().join("target")));
+    }
+
+    #[test]
+    fn is_artifact_rejects_denylisted_dir() {
+        let tmp = TempDir::new().unwrap();
+        fs::write(tmp.path().join(".gitignore"), ".git/\n").unwrap();
+        fs::create_dir(tmp.path().join(".git")).unwrap();
+        assert!(!is_artifact(&tmp.path().join(".git")));
+    }
+
+    #[test]
+    fn scan_streams_each_entry_before_done() {
+        let tmp = TempDir::new().unwrap();
+        for name in ["a", "b", "c"] {
+            let proj = tmp.path().join(name);
+            fs::create_dir(&proj).unwrap();
+            fs::write(proj.join("Cargo.toml"), "[package]").unwrap();
+            fs::create_dir(proj.join("target")).unwrap();
+        }
+
+        let (tx, rx) = crossbeam_channel::unbounded();
+        scan(tmp.path().to_path_buf(), tx);
+
+        let msgs: Vec<ScanMessage> = rx.into_iter().collect();
+        assert_eq!(msgs.len(), 4);
+        assert!(matches!(msgs[3], ScanMessage::Done));
+        assert!(msgs[..3].iter().all(|m| matches!(m, ScanMessage::Found(_))));
     }
 }

@@ -1,6 +1,7 @@
 mod components;
 mod deleter;
 mod errors;
+mod mcp;
 mod model;
 mod render;
 mod scanner;
@@ -28,12 +29,20 @@ use tuirealm::{
 #[derive(Parser)]
 #[command(name = "irona", about = "Reclaim disk space from build artifacts")]
 struct Args {
+    /// Run irona as a Model Context Protocol server over stdio.
+    #[arg(long)]
+    mcp: bool,
+
     #[arg(default_value = ".")]
     path: PathBuf,
 }
 
 fn main() -> Result<()> {
     let args = Args::parse();
+    if args.mcp {
+        return mcp::run();
+    }
+
     let root = args.path.canonicalize().unwrap_or(args.path);
 
     let original_hook = std::panic::take_hook();
