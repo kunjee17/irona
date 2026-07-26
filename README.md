@@ -45,7 +45,41 @@ cargo install --path .
 
 irona scans your home directory for build artifact folders and shows their size. Select what you want to clean up and press `d` to delete.
 
-### MCP server
+## Headless mode
+
+`--clean` skips the TUI entirely: it scans, deletes everything it finds, and prints one summary line. Built for AI tool session-end hooks and any other non-interactive context.
+
+```sh
+irona --clean ~/Workspace                   # scan, delete, report
+irona --clean --dry-run ~/Workspace         # report only, delete nothing
+irona --clean --include-gitignored ~/W      # also sweep gitignore-only matches
+```
+
+```
+irona: freed 2.3 GB from 4 directories in 1.2s
+irona: would free 2.3 GB from 4 directories (dry run)
+irona: nothing to clean in /home/you/Workspace
+```
+
+By default headless mode deletes only directories backed by a marker file — `target/` next to a `Cargo.toml`, `node_modules/` next to a `package.json`, and the rest of the table below. Directories found only through `.gitignore` are left alone, because unattended they could include a gitignored `data/`, `logs/`, or `secrets/`. Pass `--include-gitignored` to sweep those too. The TUI is unaffected and still shows both kinds.
+
+Exit code is `0` on success, including when nothing was found, so a clean workspace never fails your hook. It is `1` only if a deletion failed; the failing paths are reported on stderr.
+
+### Claude Code hook
+
+Sweep build artifacts every time a session ends, via `settings.json`:
+
+```json
+{
+  "hooks": {
+    "Stop": [{ "command": "irona --clean ~/Workspace" }]
+  }
+}
+```
+
+Run it once with `--dry-run` first to see what it would take.
+
+## MCP server
 
 irona can also run as a stdio [Model Context Protocol](https://modelcontextprotocol.io) server for AI tools:
 

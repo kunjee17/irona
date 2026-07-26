@@ -1,6 +1,8 @@
 mod components;
 mod deleter;
 mod errors;
+mod format;
+mod headless;
 mod mcp;
 mod model;
 mod render;
@@ -35,6 +37,18 @@ struct Args {
 
     #[arg(default_value = ".")]
     path: PathBuf,
+
+    /// Delete all artifacts without launching the TUI
+    #[arg(long)]
+    clean: bool,
+
+    /// With --clean: report what would be freed without deleting anything
+    #[arg(long, requires = "clean")]
+    dry_run: bool,
+
+    /// With --clean: also delete directories matched only by .gitignore
+    #[arg(long, requires = "clean")]
+    include_gitignored: bool,
 }
 
 fn main() -> Result<()> {
@@ -44,6 +58,22 @@ fn main() -> Result<()> {
     }
 
     let root = args.path.canonicalize().unwrap_or(args.path);
+
+    if args.clean {
+        let opts = headless::CleanOptions {
+            dry_run: args.dry_run,
+            include_gitignored: args.include_gitignored,
+        };
+        let summary = headless::run(root.clone(), opts);
+        println!(
+            "{}",
+            headless::format_summary(&root, &summary, opts.dry_run)
+        );
+        if summary.failed > 0 {
+            std::process::exit(1);
+        }
+        return Ok(());
+    }
 
     let original_hook = std::panic::take_hook();
     std::panic::set_hook(Box::new(move |info| {
@@ -184,5 +214,41 @@ fn run(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, root: PathBuf) -> 
             }
             Err(_) => return Ok(()),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use clap::CommandFactory;
+
+    #[test]
+    fn args_definition_is_valid() {
+        Args::command().debug_assert();
+    }
+
+    #[test]
+    fn parses_clean_with_path() {
+        let args = Args::try_parse_from(["irona", "--clean", "/tmp/w"]).unwrap();
+        assert!(args.clean);
+        assert!(!args.dry_run);
+        assert!(!args.include_gitignored);
+        assert_eq!(args.path, PathBuf::from("/tmp/w"));
+    }
+
+    #[test]
+    fn rejects_dry_run_without_clean() {
+        assert!(Args::try_parse_from(["irona", "--dry-run"]).is_err());
+    }
+
+    #[test]
+    fn rejects_include_gitignored_without_clean() {
+        assert!(Args::try_parse_from(["irona", "--include-gitignored"]).is_err());
+    }
+
+    #[test]
+    fn bare_path_still_means_tui() {
+        let args = Args::try_parse_from(["irona", "/tmp/w"]).unwrap();
+        assert!(!args.clean);
     }
 }
