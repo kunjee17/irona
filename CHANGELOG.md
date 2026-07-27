@@ -2,6 +2,17 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.5.0] - 2026-07-27
+
+### Documentation
+
+- Add animated demo GIF to README
+
+### Features
+
+- MCP server for artifact cleanup (supersedes #17, with delete guard) ([#19](https://github.com/kunjee17/irona/issues/19))
+- Add headless --clean mode for non-interactive cleanup ([#18](https://github.com/kunjee17/irona/issues/18))
+
 ## [0.4.0] - 2026-04-25
 
 ### Features
@@ -11,6 +22,7 @@ All notable changes to this project will be documented in this file.
 ### Miscellaneous
 
 - Update changelog for v0.4.0
+- Release v0.4.0
 
 ## [0.3.1] - 2026-04-22
 
