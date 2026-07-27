@@ -13,6 +13,10 @@ All notable changes to this project will be documented in this file.
 - MCP server for artifact cleanup (supersedes #17, with delete guard) ([#19](https://github.com/kunjee17/irona/issues/19))
 - Add headless --clean mode for non-interactive cleanup ([#18](https://github.com/kunjee17/irona/issues/18))
 
+### Other
+
+- Change log updated
+
 ## [0.4.0] - 2026-04-25
 
 ### Features
