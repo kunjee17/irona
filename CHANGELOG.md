@@ -16,6 +16,7 @@ All notable changes to this project will be documented in this file.
 ### Other
 
 - Change log updated
+- Change log updated
 
 ## [0.4.0] - 2026-04-25
 
