@@ -23,18 +23,35 @@ use model::{update, AppMsg, AppStatus, DeleteMsg, ListMsg};
 use ratatui::{backend::CrosstermBackend, widgets::ListState, Terminal};
 use render::render;
 use scanner::ScanMessage;
-use std::{io, path::PathBuf, sync::mpsc, thread, time::Duration};
+use std::{
+    io::{self, IsTerminal},
+    path::PathBuf,
+    sync::mpsc,
+    thread,
+    time::Duration,
+};
 use tuirealm::{
     event::NoUserEvent, Application, EventListenerCfg, PollStrategy, Sub, SubClause, SubEventClause,
 };
 
+const NO_TTY_HINT: &str = "\
+irona: the interactive TUI needs a terminal, but stdin or stdout is not a TTY.
+       For non-interactive use:
+         irona --clean <path>   delete artifacts and print a one-line summary
+         irona --mcp            run as a Model Context Protocol server over stdio";
+
 #[derive(Parser)]
-#[command(name = "irona", about = "Reclaim disk space from build artifacts")]
+#[command(
+    name = "irona",
+    version,
+    about = "Reclaim disk space from build artifacts"
+)]
 struct Args {
     /// Run irona as a Model Context Protocol server over stdio.
     #[arg(long)]
     mcp: bool,
 
+    /// Directory to scan
     #[arg(default_value = ".")]
     path: PathBuf,
 
@@ -75,6 +92,11 @@ fn main() -> Result<()> {
         return Ok(());
     }
 
+    if let Err(hint) = tui_precondition(io::stdin().is_terminal(), io::stdout().is_terminal()) {
+        eprintln!("{hint}");
+        std::process::exit(1);
+    }
+
     let original_hook = std::panic::take_hook();
     std::panic::set_hook(Box::new(move |info| {
         let _ = disable_raw_mode();
@@ -97,6 +119,14 @@ fn main() -> Result<()> {
     execute!(terminal.backend_mut(), LeaveAlternateScreen)?;
     terminal.show_cursor()?;
     result
+}
+
+fn tui_precondition(stdin_is_tty: bool, stdout_is_tty: bool) -> Result<(), &'static str> {
+    if stdin_is_tty && stdout_is_tty {
+        Ok(())
+    } else {
+        Err(NO_TTY_HINT)
+    }
 }
 
 fn run(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, root: PathBuf) -> Result<()> {
@@ -250,5 +280,28 @@ mod tests {
     fn bare_path_still_means_tui() {
         let args = Args::try_parse_from(["irona", "/tmp/w"]).unwrap();
         assert!(!args.clean);
+    }
+
+    #[test]
+    fn version_flag_reports_crate_version() {
+        let err = Args::try_parse_from(["irona", "--version"])
+            .err()
+            .expect("--version should short-circuit parsing");
+        assert_eq!(err.kind(), clap::error::ErrorKind::DisplayVersion);
+        assert!(err.to_string().contains(env!("CARGO_PKG_VERSION")));
+    }
+
+    #[test]
+    fn tui_runs_only_when_both_streams_are_ttys() {
+        assert!(tui_precondition(true, true).is_ok());
+        assert!(tui_precondition(false, true).is_err());
+        assert!(tui_precondition(true, false).is_err());
+        assert!(tui_precondition(false, false).is_err());
+    }
+
+    #[test]
+    fn no_tty_hint_points_at_headless_modes() {
+        assert!(NO_TTY_HINT.contains("--clean"));
+        assert!(NO_TTY_HINT.contains("--mcp"));
     }
 }

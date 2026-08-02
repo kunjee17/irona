@@ -37,13 +37,34 @@ cargo install --path .
 
 ## Usage
 
+irona has three modes: an interactive TUI, a headless `--clean` sweep, and an MCP server.
+
+```sh
+irona [PATH]                    # interactive TUI (PATH defaults to the current directory)
+irona --clean [PATH]            # headless sweep, one summary line, no TUI
+irona --mcp                     # Model Context Protocol server over stdio
+irona --version                 # print version
+irona --help                    # print all flags
+```
+
+| Flag | Mode | Description |
+|---|---|---|
+| `--clean` | headless | Scan and delete every artifact found, then print a summary |
+| `--dry-run` | headless | With `--clean`: report what would be freed, delete nothing |
+| `--include-gitignored` | headless | With `--clean`: also delete directories matched only by `.gitignore` |
+| `--mcp` | server | Serve `scan_artifacts` and `clean_artifacts` over stdio |
+
+### Interactive TUI
+
 - **↑ / ↓** — navigate entries
 - **Space** — select / deselect entry
 - **a** — select / deselect all
 - **d** — delete selected entries
 - **q / Esc** — quit
 
-irona scans your home directory for build artifact folders and shows their size. Select what you want to clean up and press `d` to delete.
+irona scans `PATH` for build artifact folders and shows their size. Select what you want to clean up and press `d` to delete.
+
+The TUI needs a real terminal. If stdin or stdout is not a TTY — in a pipe, a CI job, or an editor task runner — irona exits with code `1` and points you at `--clean` and `--mcp` instead of failing with a raw OS error.
 
 ## Headless mode
 
@@ -72,7 +93,13 @@ Sweep build artifacts every time a session ends, via `settings.json`:
 ```json
 {
   "hooks": {
-    "Stop": [{ "command": "irona --clean ~/Workspace" }]
+    "Stop": [
+      {
+        "hooks": [
+          { "type": "command", "command": "irona --clean ~/Workspace" }
+        ]
+      }
+    ]
   }
 }
 ```
@@ -103,14 +130,26 @@ Using `irona` from `PATH` keeps MCP client configs portable and avoids hardcodin
 }
 ```
 
+In Claude Code the equivalent one-liner is:
+
+```bash
+claude mcp add irona -- irona --mcp
+```
+
 The MCP server exposes two tools:
 
-| Tool | Description |
-|---|---|
-| `scan_artifacts` | Scan a path and return artifact directories with sizes and detected language/source |
-| `clean_artifacts` | Delete a provided list of artifact directories and return per-path results plus freed bytes |
+| Tool | Input | Returns |
+|---|---|---|
+| `scan_artifacts` | `path` (optional, defaults to the working directory) | `root`, `count`, `total_size_bytes`, and an `artifacts` array of `{path, language, size_bytes}` |
+| `clean_artifacts` | `paths` (array, at least one) | `requested_count`, `deleted_count`, `total_freed_bytes`, and a `results` array of `{path, deleted, size_bytes, elapsed_ms, error?}` |
+
+Both tools return structured content alongside a text summary, and both carry MCP annotations — `scan_artifacts` is marked `readOnlyHint`, `clean_artifacts` `destructiveHint` — so clients that treat destructive tools differently can tell them apart.
+
+`scan_artifacts` reports everything the TUI would show, including `.gitignore`-only matches, each labelled by source in the `language` field. This is the opposite default from `irona --clean`, which skips gitignore-only matches unless you pass `--include-gitignored`; the MCP flow shows them and leaves the decision to you.
 
 `clean_artifacts` refuses any path irona would not itself classify as an artifact. A directory only qualifies if a marker file sits beside it (`target/` next to a `Cargo.toml`) or a `.gitignore` rule matches it. Handing it an arbitrary path fails the whole call and deletes nothing, so a wrong path from the model cannot take out your work.
+
+The intended flow is two calls: `scan_artifacts` to see what exists and how much it costs, then `clean_artifacts` with the subset you approve.
 
 ## Supported Languages
 
